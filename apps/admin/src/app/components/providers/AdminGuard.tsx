@@ -15,6 +15,8 @@ export default function AdminGuard({
   const { isSignedIn, isLoaded } = useUser();
 
   const isAdmin = useQuery(api.admins.isAdmin, isSignedIn ? {} : "skip");
+  const debug = useQuery(api.admins.debugAuth);
+  console.log("DEBUG AUTH:", debug);
 
   // Still loading auth
   if (!isLoaded || (isSignedIn && isAdmin === undefined)) return null;
