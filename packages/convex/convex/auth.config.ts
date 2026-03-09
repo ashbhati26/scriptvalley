@@ -3,7 +3,7 @@ export default {
     {
       domain:
         process.env.NEXT_PUBLIC_CLERK_ISSUER ||
-        "https://clerk.thecodeone.in",
+        "https://clerk.scriptvalley.com",
       applicationID: "convex",
     },
   ],
