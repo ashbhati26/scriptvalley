@@ -91,13 +91,3 @@ export const removeAdmin = mutation({
     return { ok: true };
   },
 });
-
-export const debugAuth = query({
-  handler: async ({ db, auth }) => {
-    const identity = await auth.getUserIdentity();
-    return {
-      identity: identity,
-      subject: identity?.subject ?? null,
-    };
-  },
-});
