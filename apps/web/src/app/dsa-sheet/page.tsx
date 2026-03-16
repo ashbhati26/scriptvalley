@@ -149,6 +149,15 @@ export default function DSASheetExplorePage() {
               >
                 <Bookmark className="w-3 h-3" />
                 Saved
+                {(savedSheets as SavedSheet[]).length > 0 && (
+                  <span className={`text-[9px] px-1 py-0.5 rounded-full font-bold ml-0.5 ${
+                    activeFilter === "saved"
+                      ? "bg-[rgba(58,94,255,0.15)] text-[#3A5EFF]"
+                      : "bg-[var(--bg-hover)] text-[var(--text-disabled)]"
+                  }`}>
+                    {(savedSheets as SavedSheet[]).length}
+                  </span>
+                )}
               </button>
             </div>
           )}

@@ -1,20 +1,8 @@
 import { api } from "../../../../../../../packages/convex/convex/_generated/api";
 import { fetchQuery } from "convex/nextjs";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import ModuleContent from "./_components/ModuleContent";
-
-interface CourseModule {
-  order: number;
-  title: string;
-  slug: string;
-  content: string;
-}
-
-interface Course {
-  title: string;
-  slug: string;
-  modules: CourseModule[];
-}
+import { Course } from "../../courseTypes";
 
 interface Props {
   params: Promise<{ courseSlug: string; moduleSlug: string }>;
@@ -22,30 +10,53 @@ interface Props {
 
 export async function generateMetadata({ params }: Props) {
   const { courseSlug, moduleSlug } = await params;
-  const course = await fetchQuery(api.courses.getCourseBySlug, { slug: courseSlug }) as Course | null;
-  const mod = course?.modules?.find((m: CourseModule) => m.slug === moduleSlug);
-  return {
-    title: mod ? `${mod.title} — ${course!.title}` : "Course",
-  };
+  const course = (await fetchQuery(api.courses.getCourseBySlug, {
+    slug: courseSlug,
+  })) as Course | null;
+  const mod = course?.modules?.find((m) => m.slug === moduleSlug);
+  return { title: mod ? `${mod.title} — ${course!.title}` : "Course" };
 }
 
 export default async function ModulePage({ params }: Props) {
   const { courseSlug, moduleSlug } = await params;
 
-  const course = await fetchQuery(api.courses.getCourseBySlug, { slug: courseSlug }) as Course | null;
+  const course = (await fetchQuery(api.courses.getCourseBySlug, {
+    slug: courseSlug,
+  })) as Course | null;
   if (!course) notFound();
 
-  const seen = new Set<string>();
-  const modules = (course.modules ?? []).filter((m: CourseModule) => {
-    if (seen.has(m.slug)) return false;
-    seen.add(m.slug);
-    return true;
-  });
+  const isStructured = course.template === "structured";
 
-  const modIndex = modules.findIndex((m: CourseModule) => m.slug === moduleSlug);
+  // De-duplicate modules by slug
+  const seen = new Set<string>();
+  const modules = (course.modules ?? [])
+    .sort((a, b) => a.order - b.order)
+    .filter((m) => {
+      if (seen.has(m.slug)) return false;
+      seen.add(m.slug);
+      return true;
+    });
+
+  const modIndex = modules.findIndex((m) => m.slug === moduleSlug);
   if (modIndex === -1) notFound();
 
-  const mod     = modules[modIndex];
+  const mod = modules[modIndex];
+
+  if (isStructured) {
+    const lessons = [...(mod.lessons ?? [])].sort((a, b) => a.order - b.order);
+    if (lessons.length > 0) {
+      const firstLesson = lessons[0];
+      const lSlug =
+        firstLesson.title
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9-]/g, "")
+          .slice(0, 60) || "lesson-1";
+      redirect(`/courses/${courseSlug}/${moduleSlug}/${lSlug}`);
+    }
+  }
+
   const prevMod = modules[modIndex - 1] ?? null;
   const nextMod = modules[modIndex + 1] ?? null;
 
@@ -57,6 +68,7 @@ export default async function ModulePage({ params }: Props) {
       totalModules={modules.length}
       prevMod={prevMod}
       nextMod={nextMod}
+      isStructured={isStructured}
     />
   );
 }

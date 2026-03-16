@@ -58,6 +58,7 @@ export default async function ModulePage({ params }: Props) {
       totalModules={modules.length}
       prevMod={prevMod}
       nextMod={nextMod}
+      isStructured={true}
     />
   );
 }

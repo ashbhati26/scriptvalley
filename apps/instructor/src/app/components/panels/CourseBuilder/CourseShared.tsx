@@ -3,7 +3,6 @@
 import { useRef } from "react";
 import { STATUS_META } from "./courseTypes";
 
-// ─── Status chip ──────────────────────────────────────────────────────────────
 export function StatusChip({ status, size = "sm" }: { status: string; size?: "sm" | "md" }) {
   const m = STATUS_META[status] ?? STATUS_META.draft;
   return (
@@ -18,7 +17,6 @@ export function StatusChip({ status, size = "sm" }: { status: string; size?: "sm
   );
 }
 
-// ─── Drag sort hook ───────────────────────────────────────────────────────────
 export function useDragSort<T>(items: T[], onReorder: (next: T[]) => void) {
   const dragging = useRef<number | null>(null);
   return {
