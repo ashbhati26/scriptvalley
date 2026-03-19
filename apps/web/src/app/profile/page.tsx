@@ -1,171 +1,159 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { usePaginatedQuery, useQuery } from "convex/react";
-import { useState } from "react";
+import { useQuery } from "convex/react";
 import { api } from "../../../../../packages/convex/convex/_generated/api";
-import { AnimatePresence, motion } from "framer-motion";
-import { Code, ListVideo, Star } from "lucide-react";
-import Link from "next/link";
-import ProtectedRoute from "@/components/ProtectedRoute";
-import { LoaderTwo } from "@/components/ui/loader";
-import ProfileOverview from "./_components/ProfileOverview";
-import ExecutionCard from "./_components/ExecutionCard";
-import StarredCard from "./_components/StarrdCard";
-import StarButton from "@/components/StarButton";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import ProfileSkeleton     from "./_components/ProfileSkeleton";
+import ProfileIdentityCard from "./_components/ProfileIdentityCard";
+import OverviewTab         from "./_components/OverviewTab";
+import StatsTab            from "./_components/StatsTab";
 
-const TABS = [
-  { id: "executions" as const, label: "Executions", icon: ListVideo },
-  { id: "starred"    as const, label: "Starred",    icon: Star      },
-];
+type Tab = "overview" | "stats";
 
-function Empty({
-  icon: Icon,
-  message,
-  link,
-}: {
-  icon: React.ElementType;
-  message: string;
-  link: { href: string; label: string };
-}) {
-  return (
-    <div className="py-12 flex flex-col items-center gap-3 text-center">
-      <Icon className="w-7 h-7 text-[var(--bg-active)]" />
-      <p className="text-sm text-[var(--text-faint)]">{message}</p>
-      <Link href={link.href} className="text-xs text-[#3A5EFF] hover:text-[#4a6aff] transition-colors">
-        {link.label}
-      </Link>
-    </div>
-  );
-}
+type Attempt = {
+  attempted:  boolean;
+  difficulty: string;
+};
 
-function ProfileContent() {
+type LessonCountMap = Record<string, number>;
+
+type SavedCourse = {
+  courseSlug: string;
+  savedAt:    number;
+};
+
+type StarredQuestion = {
+  questionTitle: string;
+};
+
+type Experience = {
+  _id: string;
+};
+
+type Snippet = {
+  _id: string;
+};
+
+export default function ProfilePage() {
   const { user, isLoaded } = useUser();
-  const [tab, setTab] = useState<"executions" | "starred">("executions");
+  const [tab, setTab]      = useState<Tab>("overview");
 
-  const userStats       = useQuery(api.codeExecutions.getUserStats,    { userId: user?.id ?? "" });
-  const userData        = useQuery(api.users.getUser,                  { userId: user?.id ?? "" });
-  const starredSnippets = useQuery(api.snippets.getStarredSnippets);
-  const { results: executions, status, isLoading, loadMore } = usePaginatedQuery(
-    api.codeExecutions.getUserExecutions,
-    { userId: user?.id ?? "" },
-    { initialNumItems: 5 },
-  );
+  const userId = user?.id ?? "";
+  const skip   = !isLoaded || !userId;
+
+  const profile   = useQuery(api.users.getUser,                 skip ? "skip" : { userId });
+  const socials   = useQuery(api.socials.getUserSocialLinks,    skip ? "skip" : { userId });
+  const platforms = useQuery(api.platforms.getUserPlatformData, skip ? "skip" : { userId });
+
+  const attempts     = useQuery(api.progress.getAllAttempts,            skip ? "skip" : { userId });
+  const lessonCounts = useQuery(api.courses.getAllLessonProgressCounts,  skip ? "skip" : undefined);
+  const savedCourses = useQuery(api.courses.getSavedCourses,            skip ? "skip" : undefined);
+  const starredList  = useQuery(api.starred.getStarredByUser,           skip ? "skip" : { userId });
+  const notesCount   = useQuery(api.notes.getNotesCount,                skip ? "skip" : { userId });
+  const experiences  = useQuery(api.experiences.getUserExperiences,      skip ? "skip" : undefined);
+  const snippets     = useQuery(api.snippets.getUserSnippets,            skip ? "skip" : undefined);
+
+  if (!isLoaded || profile === undefined) return <ProfileSkeleton />;
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-base)] flex items-center justify-center">
+        <p className="text-sm text-[var(--text-faint)]">Sign in to view your profile</p>
+      </div>
+    );
+  }
+
+  const attempted   = ((attempts ?? []) as Attempt[]).filter((a) => a.attempted);
+  const totalSolved = attempted.length;
+  const easySolved  = attempted.filter((a) => a.difficulty?.toLowerCase() === "easy").length;
+  const medSolved   = attempted.filter((a) => a.difficulty?.toLowerCase() === "medium").length;
+  const hardSolved  = attempted.filter((a) => a.difficulty?.toLowerCase() === "hard").length;
+
+  const counts       = (lessonCounts ?? {}) as LessonCountMap;
+  const totalLessons  = Object.values(counts).reduce((s, v) => s + v, 0);
+  const coursesInProg = Object.values(counts).filter((v) => v > 0).length;
+  const savedCount    = ((savedCourses ?? []) as SavedCourse[]).length;
+  const starredCount  = ((starredList  ?? []) as StarredQuestion[]).length;
+  const snippetCount  = ((snippets     ?? []) as Snippet[]).length;
+  const expCount      = ((experiences  ?? []) as Experience[]).length;
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)] w-full pt-16 pb-10">
-      <div className="max-w-5xl mx-auto px-4 md:px-6">
+    <div className="min-h-screen bg-[var(--bg-base)]">
+      <div className="max-w-2xl mx-auto px-4 md:px-6 py-12 mt-8 space-y-8">
 
-        {/* Page header */}
-        <div className="mt-8 mb-6">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] mb-1">Playground</p>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] mb-1">
+            Account
+          </p>
           <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Profile</h1>
         </div>
-        <div className="border-t border-[var(--border-subtle)] mb-6" />
 
-        <ProfileOverview
-          userStats={userStats}
-          userData={userData}
-          user={user ?? null}
-          isReady={!!(userStats && userData && isLoaded)}
-          starredCount={starredSnippets?.length ?? 0}
-          executions={executions as Parameters<typeof ProfileOverview>[0]["executions"]}
+        <ProfileIdentityCard
+          user={{
+            fullName:  user.fullName,
+            imageUrl:  user.imageUrl,
+            firstName: user.firstName,
+            email:     user.primaryEmailAddress?.emailAddress ?? null,
+          }}
+          profile={profile ?? null}
+          socials={socials ?? null}
+          platforms={platforms ?? null}
         />
 
-        {/* Tabs */}
-        <div className="rounded-lg border border-[var(--border-subtle)] overflow-hidden">
-          <div className="flex gap-px px-3 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-input)]">
-            {TABS.map(({ id, label, icon: Icon }) => {
-              const active = tab === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => setTab(id)}
-                  className={`relative flex items-center gap-1.5 px-4 py-2 rounded-md text-sm transition-colors duration-100 ${
-                    active
-                      ? "bg-[var(--bg-active)] text-[var(--text-primary)]"
-                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
-                  }`}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="profileTab"
-                      className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-[#3A5EFF] rounded-r-full"
-                    />
-                  )}
-                  <Icon className={`w-3.5 h-3.5 ${active ? "text-[#3A5EFF]" : "text-[var(--text-faint)]"}`} />
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={tab}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.12 }}
-              className="p-4 bg-[var(--bg-base)] space-y-4"
+        <div className="flex gap-px p-1 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] w-fit">
+          {(["overview", "stats"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                tab === t
+                  ? "bg-[var(--bg-active)] text-[var(--text-primary)]"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              }`}
             >
-              {tab === "executions" && (
-                isLoading ? (
-                  <div className="py-12 flex justify-center"><LoaderTwo /></div>
-                ) : executions.length === 0 ? (
-                  <Empty icon={Code} message="No executions yet" link={{ href: "/", label: "Open playground →" }} />
-                ) : (
-                  <>
-                    {executions.map((ex) => (
-                      <ExecutionCard
-                        key={ex._id}
-                        execution={ex as Parameters<typeof ExecutionCard>[0]["execution"]}
-                      />
-                    ))}
-                    {status === "CanLoadMore" && (
-                      <div className="flex justify-center">
-                        <button
-                          onClick={() => loadMore(5)}
-                          className="px-4 py-2 rounded-md text-xs text-[var(--text-faint)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] transition-colors"
-                        >
-                          Load more
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )
-              )}
-
-              {tab === "starred" && (
-                !starredSnippets ? (
-                  <div className="py-12 flex justify-center"><LoaderTwo /></div>
-                ) : starredSnippets.length === 0 ? (
-                  <Empty icon={Star} message="No starred snippets" link={{ href: "/snippets", label: "Explore snippets →" }} />
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {starredSnippets.map((s) => (
-                      <StarredCard
-                        key={s._id}
-                        snippet={s as Parameters<typeof StarredCard>[0]["snippet"]}
-                        starButton={<StarButton snippetId={s._id} />}
-                      />
-                    ))}
-                  </div>
-                )
-              )}
-            </motion.div>
-          </AnimatePresence>
+              {t === "overview" ? "Overview" : "Activity Stats"}
+            </button>
+          ))}
         </div>
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.13, ease: "easeOut" }}
+          >
+            {tab === "overview" ? (
+              <OverviewTab
+                totalSolved={totalSolved}
+                easySolved={easySolved}
+                medSolved={medSolved}
+                hardSolved={hardSolved}
+                totalLessons={totalLessons}
+                coursesInProg={coursesInProg}
+              />
+            ) : (
+              <StatsTab
+                totalSolved={totalSolved}
+                easySolved={easySolved}
+                medSolved={medSolved}
+                hardSolved={hardSolved}
+                starredCount={starredCount}
+                notesCount={notesCount ?? 0}
+                totalLessons={totalLessons}
+                coursesInProg={coursesInProg}
+                savedCount={savedCount}
+                snippetCount={snippetCount}
+                expCount={expCount}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
 
       </div>
     </div>
-  );
-}
-
-export default function ProfilePage() {
-  return (
-    <ProtectedRoute>
-      <ProfileContent />
-    </ProtectedRoute>
   );
 }

@@ -5,19 +5,17 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Menu,
-  X,
-  LayoutDashboard,
-  ChevronDown,
-  LogIn,
-  User,
+  Menu, X, LayoutDashboard, ChevronDown,
 } from "lucide-react";
-import { useUser, SignInButton, UserButton } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";                          // ← kept, no SignInButton/UserButton
 import { exploreItems } from "@/app/dsa-sheet/data/explore-items";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuthModal } from "@/components/providers/AuthModalProvider"; // ← new
+import UserDropdown from "@/components/UserDropdown";                    // ← new
 
 type Position = { left: number; width: number; opacity: number };
 
+// ── Theme toggle — unchanged ──────────────────────────────────────────────────
 function ThemeToggle() {
   const { isDark, toggle } = useTheme();
 
@@ -40,10 +38,7 @@ function ThemeToggle() {
               animate={{ opacity: 1, rotate: 0, scale: 1 }}
               exit={{ opacity: 0, rotate: 30, scale: 0.6 }}
               transition={{ duration: 0.15 }}
-              width="9"
-              height="9"
-              viewBox="0 0 24 24"
-              fill="white"
+              width="9" height="9" viewBox="0 0 24 24" fill="white"
             >
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </motion.svg>
@@ -54,22 +49,18 @@ function ThemeToggle() {
               animate={{ opacity: 1, rotate: 0, scale: 1 }}
               exit={{ opacity: 0, rotate: -30, scale: 0.6 }}
               transition={{ duration: 0.15 }}
-              width="9"
-              height="9"
-              viewBox="0 0 24 24"
-              fill="white"
-              stroke="white"
-              strokeWidth="2"
+              width="9" height="9" viewBox="0 0 24 24"
+              fill="white" stroke="white" strokeWidth="2"
             >
               <circle cx="12" cy="12" r="4" />
-              <line x1="12" y1="2" x2="12" y2="4" />
+              <line x1="12" y1="2"  x2="12" y2="4"  />
               <line x1="12" y1="20" x2="12" y2="22" />
-              <line x1="2" y1="12" x2="4" y2="12" />
+              <line x1="2"  y1="12" x2="4"  y2="12" />
               <line x1="20" y1="12" x2="22" y2="12" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"  />
               <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36" />
+              <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"  />
             </motion.svg>
           )}
         </AnimatePresence>
@@ -78,24 +69,20 @@ function ThemeToggle() {
   );
 }
 
+// ── Nav cursor — unchanged ────────────────────────────────────────────────────
 function NavCursor({ position }: { position: Position }) {
   return (
     <motion.li
-      animate={{
-        left: position.left,
-        width: position.width,
-        opacity: position.opacity,
-      }}
+      animate={{ left: position.left, width: position.width, opacity: position.opacity }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className="absolute z-0 h-7 rounded-md bg-[var(--bg-hover)] pointer-events-none"
     />
   );
 }
 
+// ── NavTab — unchanged ────────────────────────────────────────────────────────
 function NavTab({
-  label,
-  href,
-  setPosition,
+  label, href, setPosition,
 }: {
   label: string;
   href: string;
@@ -125,10 +112,9 @@ function NavTab({
   );
 }
 
+// ── NavDropdown — unchanged ───────────────────────────────────────────────────
 function NavDropdown({
-  label,
-  items,
-  setPosition,
+  label, items, setPosition,
 }: {
   label: string;
   items: typeof exploreItems;
@@ -157,10 +143,7 @@ function NavDropdown({
     >
       <div className="flex items-center gap-0.5 px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors duration-100 cursor-pointer">
         <span>{label}</span>
-        <motion.span
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.15 }}
-        >
+        <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.15 }}>
           <ChevronDown className="w-3 h-3" />
         </motion.span>
       </div>
@@ -199,82 +182,19 @@ function NavDropdown({
   );
 }
 
-function AuthButton({
-  isSignedIn,
-}: {
-  isSignedIn: boolean | null | undefined;
-}) {
-  if (isSignedIn) {
-    return (
-      <UserButton
-        appearance={{
-          elements: {
-            userButtonAvatarBox:
-              "h-7 w-7 ring-1 ring-[var(--border-subtle)] hover:ring-[#3A5EFF]/40 transition-all duration-150",
-            avatarImage: "h-7 w-7 rounded-full",
-            userButtonTrigger: "focus:shadow-none outline-none rounded-full",
-            userButtonPopoverCard:
-              "bg-[var(--bg-elevated)] border border-[var(--border-subtle)] shadow-xl shadow-black/20 rounded-xl",
-            userButtonPopoverFooter: "hidden",
-            userButtonPopoverMainIdentifier:
-              "text-[var(--text-primary)] text-sm font-medium",
-            userPreviewSecondaryIdentifier: "text-[var(--text-faint)] text-xs",
-            userButtonPopoverActionButton:
-              "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-md transition-colors duration-100 text-xs",
-            userButtonPopoverActionButtonIcon: "text-[var(--text-disabled)]",
-            userButtonPopoverActionButtonText: "text-[inherit]",
-            menuItem:
-              "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-md transition-colors",
-            menuItemIcon: "text-[var(--text-disabled)]",
-          },
-        }}
-      >
-        <UserButton.MenuItems>
-          <UserButton.Link
-            label="Dev Profile"
-            labelIcon={<User className="w-3.5 h-3.5" />}
-            href="/dev-profile"
-          />
-        </UserButton.MenuItems>
-      </UserButton>
-    );
-  }
-
-  return (
-    <SignInButton mode="modal">
-      <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[var(--border-subtle)] bg-transparent text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-medium)] transition-colors duration-100 outline-none">
-        <LogIn className="w-3.5 h-3.5" />
-        Sign in
-      </button>
-    </SignInButton>
-  );
-}
-
-const LANDING_TABS = [
-  { label: "DSA Sheets", href: "/dsa-sheet" },
-  { label: "Snippets", href: "/snippets" },
-  { label: "Interview Experiences", href: "/experiences" },
-  { label: "Contests", href: "/contests" },
-];
-
-const AUTH_TABS = [
-  { label: "DSA Sheets", href: "/dsa-sheet" },
-  { label: "Snippets", href: "/snippets" },
-  { label: "Interview Experiences", href: "/experiences" },
-  { label: "Contests", href: "/contests" },
+const TABS = [
+  { label: "DSA Sheets",            href: "/dsa-sheet"    },
+  { label: "Snippets",              href: "/snippets"     },
+  { label: "Interview Experiences", href: "/experiences"  },
+  { label: "Contests",              href: "/contests"     },
 ];
 
 export default function Navbar() {
   const { isSignedIn } = useUser();
-  const { isDark } = useTheme();
-  const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState<Position>({
-    left: 0,
-    width: 0,
-    opacity: 0,
-  });
-
-  const tabs = isSignedIn ? AUTH_TABS : LANDING_TABS;
+  const { isDark }     = useTheme();
+  const { openSignIn } = useAuthModal(); // ← replaces SignInButton
+  const [isOpen,    setIsOpen]    = useState(false);
+  const [position,  setPosition]  = useState<Position>({ left: 0, width: 0, opacity: 0 });
 
   return (
     <header
@@ -291,7 +211,7 @@ export default function Navbar() {
             : "border border-[var(--border-subtle)] md:rounded-full bg-[var(--bg-base)]/80 backdrop-blur-md"
         }`}
       >
-        {/* Logo — desktop & main */}
+        {/* Logo */}
         <Link href="/" className="flex items-center gap-2 z-10 shrink-0">
           <Image
             alt="Script Valley"
@@ -301,25 +221,24 @@ export default function Navbar() {
           />
         </Link>
 
+        {/* Desktop nav tabs — centered */}
         <div className="hidden md:flex absolute left-1/2 -translate-x-1/2">
           <ul
             className="flex items-center gap-px relative"
             onMouseLeave={() => setPosition((p) => ({ ...p, opacity: 0 }))}
           >
             <NavCursor position={position} />
-            {tabs.map((t) => (
+            {TABS.map((t) => (
               <NavTab key={t.href} {...t} setPosition={setPosition} />
             ))}
-            <NavDropdown
-              label="Explore"
-              items={exploreItems}
-              setPosition={setPosition}
-            />
+            <NavDropdown label="Explore" items={exploreItems} setPosition={setPosition} />
           </ul>
         </div>
 
+        {/* Desktop right side */}
         <div className="hidden md:flex items-center gap-2 z-10">
           <ThemeToggle />
+
           {isSignedIn && (
             <Link
               href="/dev-profile"
@@ -329,9 +248,17 @@ export default function Navbar() {
               Dashboard
             </Link>
           )}
-          <AuthButton isSignedIn={isSignedIn} />
+
+          {/*
+            ── CHANGED ──────────────────────────────────────────────────────
+            Was: <AuthButton isSignedIn={isSignedIn} />
+            Now: UserDropdown (signed in) or Sign in button (signed out)
+            UserDropdown handles both states internally via SignedIn/SignedOut
+          */}
+          <UserDropdown signInLabel="Sign in" />
         </div>
 
+        {/* Mobile hamburger */}
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Open menu"
@@ -341,32 +268,25 @@ export default function Navbar() {
         </button>
       </div>
 
+      {/* Mobile drawer */}
       <AnimatePresence>
         {isOpen && (
           <>
             <motion.div
               className="fixed inset-0 bg-black/60 z-40 md:hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
               onClick={() => setIsOpen(false)}
             />
 
             <motion.aside
               className="fixed top-0 right-0 h-full w-[272px] md:hidden bg-[var(--bg-base)] border-l border-[var(--border-subtle)] z-50 flex flex-col"
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
+              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
             >
+              {/* Drawer header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-                {/* Logo — mobile drawer */}
-                <Link
-                  href="/"
-                  className="flex items-center gap-2"
-                  onClick={() => setIsOpen(false)}
-                >
+                <Link href="/" className="flex items-center gap-2" onClick={() => setIsOpen(false)}>
                   <Image
                     alt="Script Valley"
                     width={86}
@@ -385,12 +305,13 @@ export default function Navbar() {
                 </div>
               </div>
 
+              {/* Drawer nav */}
               <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
                 <div>
                   <p className="text-[9px] uppercase tracking-widest text-[var(--text-disabled)] px-2 mb-1">
                     {isSignedIn ? "Tools" : "Navigate"}
                   </p>
-                  {tabs.map(({ label, href }) => (
+                  {TABS.map(({ label, href }) => (
                     <Link
                       key={href}
                       href={href}
@@ -419,10 +340,12 @@ export default function Navbar() {
                 </div>
               </nav>
 
+              {/* Drawer account section */}
               <div className="px-3 py-4 border-t border-[var(--border-subtle)] space-y-2">
                 <p className="text-[9px] uppercase tracking-widest text-[var(--text-disabled)] px-1 mb-2">
                   Account
                 </p>
+
                 {isSignedIn ? (
                   <>
                     <Link
@@ -433,12 +356,23 @@ export default function Navbar() {
                       <LayoutDashboard className="w-3.5 h-3.5" />
                       Go to Dashboard
                     </Link>
+                    {/* UserDropdown in mobile — shows avatar + dropdown */}
                     <div className="px-1 pt-1">
-                      <AuthButton isSignedIn={isSignedIn} />
+                      <UserDropdown />
                     </div>
                   </>
                 ) : (
-                  <AuthButton isSignedIn={isSignedIn} />
+                  /*
+                    ── CHANGED ──────────────────────────────────────────────
+                    Was: <SignInButton mode="modal"><button>Sign in</button></SignInButton>
+                    Now: plain button that opens our custom modal
+                  */
+                  <button
+                    onClick={() => { openSignIn(); setIsOpen(false); }}
+                    className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-md border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-medium)] transition-colors"
+                  >
+                    Sign in
+                  </button>
                 )}
               </div>
             </motion.aside>

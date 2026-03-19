@@ -2,21 +2,23 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-import ConvexClientProvider from "@/components/providers/ConvexClientProvider";
-import { Toaster } from "react-hot-toast";
-import ClientAnalytics from "@/components/ClientAnalytics";
-import UserSyncProvider from "@/components/providers/UserSyncProvider";
-import { DockWrapper } from "@/components/DockWrapper";
-import Footer from "@/components/Footer";
-import Navbar from "@/components/Navbar";
+import ConvexClientProvider  from "../components/providers/ConvexClientProvider";
+import AuthModalProvider     from "../components/providers/AuthModalProvider"; // ← new
+import AuthModal             from "../components/auth/AuthModal";              // ← new
+import { Toaster }           from "react-hot-toast";
+import ClientAnalytics       from "../components/ClientAnalytics";
+import UserSyncProvider      from "../components/providers/UserSyncProvider";
+import { DockWrapper }       from "../components/DockWrapper";
+import Footer                from "../components/Footer";
+import Navbar                from "../components/Navbar";
 
 export const dynamic = "force-dynamic";
 
 const inter = Inter({
   variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  display: "swap",
+  subsets:  ["latin"],
+  weight:   ["300", "400", "500", "600", "700"],
+  display:  "swap",
 });
 
 const SITE_URL  = "https://scriptvalley.com";
@@ -28,10 +30,8 @@ export const metadata: Metadata = {
     default:  `${SITE_NAME} — Learn DSA & Programming`,
     template: `%s — ${SITE_NAME}`,
   },
-
   description:
     "Script Valley offers structured DSA courses, curated problem sheets, coding challenges, and MCQs built by expert instructors. Learn at your own pace.",
-
   openGraph: {
     siteName:    SITE_NAME,
     type:        "website",
@@ -40,12 +40,10 @@ export const metadata: Metadata = {
     title:       `${SITE_NAME} — Learn DSA & Programming`,
     description: "Structured DSA courses and curated problem sheets built by expert instructors.",
   },
-
   twitter: {
     card:  "summary",
     title: `${SITE_NAME} — Learn DSA & Programming`,
   },
-
   robots: {
     index:  true,
     follow: true,
@@ -61,9 +59,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
@@ -92,11 +88,18 @@ export default function RootLayout({
           }}
         >
           <ConvexClientProvider>
-            <UserSyncProvider />
-            <Navbar />
-            {children}
-            <DockWrapper />
-            <Footer />
+            {/* ↓ AuthModalProvider must wrap everything so useAuthModal()
+                works in Navbar, course cards, DSA sheets — anywhere */}
+            <AuthModalProvider>
+              <UserSyncProvider />
+              <Navbar />
+              {children}
+              <DockWrapper />
+              <Footer />
+
+              {/* ↓ Renders the modal portal — must be inside AuthModalProvider */}
+              <AuthModal />
+            </AuthModalProvider>
           </ConvexClientProvider>
 
           <Toaster
@@ -112,16 +115,10 @@ export default function RootLayout({
                 boxShadow:    "0 4px 24px rgba(0,0,0,0.2)",
               },
               success: {
-                iconTheme: {
-                  primary:   "#3A5EFF",
-                  secondary: "var(--bg-elevated)",
-                },
+                iconTheme: { primary: "#3A5EFF",  secondary: "var(--bg-elevated)" },
               },
               error: {
-                iconTheme: {
-                  primary:   "#ef4444",
-                  secondary: "var(--bg-elevated)",
-                },
+                iconTheme: { primary: "#ef4444", secondary: "var(--bg-elevated)" },
               },
             }}
           />
