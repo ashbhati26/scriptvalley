@@ -1,16 +1,19 @@
 "use client";
 
+// FILE: app/(main)/courses/[courseSlug]/[moduleSlug]/_components/CourseSidebar.tsx
+// CHANGE: Added an "Overview" link at the very top of the sidebar nav.
+
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown, ChevronRight, Check } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, LayoutList } from "lucide-react";
 import { Course, lessonSlug } from "../../../courseTypes";
 
 interface Props {
   course:            Course;
   activeModSlug:     string;
   activeLessonSlug?: string;
-  completedSet:      Set<string>;   // "moduleSlug::lessonSlug"
+  completedSet:      Set<string>;
   onNavigate:        () => void;
 }
 
@@ -18,7 +21,7 @@ export default function CourseSidebar({
   course, activeModSlug, activeLessonSlug, completedSet, onNavigate,
 }: Props) {
   const isStructured = course.template === "structured";
-  const modules = [...(course.modules ?? [])].sort((a, b) => a.order - b.order);
+  const modules      = [...(course.modules ?? [])].sort((a, b) => a.order - b.order);
 
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([activeModSlug]));
   useEffect(() => {
@@ -33,18 +36,51 @@ export default function CourseSidebar({
     });
   }
 
+  // Is the overview page active? (no moduleSlug in URL — activeModSlug will be undefined/empty)
+  const isOverviewActive = !activeModSlug;
+
+  // ── Overview link — shown on all templates ────────────────────────────────
+  const OverviewLink = (
+    <Link
+      href={`/courses/${course.slug}`}
+      onClick={onNavigate}
+      className={[
+        "relative flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm transition-colors mb-1",
+        isOverviewActive
+          ? "bg-[var(--bg-active)] text-[var(--text-primary)]"
+          : "text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]",
+      ].join(" ")}
+    >
+      {isOverviewActive && (
+        <motion.span
+          layoutId="sidebar-indicator"
+          className="absolute left-0 top-2 bottom-2 w-[3px] bg-[#3A5EFF] rounded-r-full"
+        />
+      )}
+      <span className={[
+        "shrink-0 w-5 h-5 rounded-full flex items-center justify-center",
+        isOverviewActive ? "bg-[#3A5EFF] text-white" : "bg-[var(--bg-hover)] text-[var(--text-disabled)]",
+      ].join(" ")}>
+        <LayoutList className="w-3 h-3" />
+      </span>
+      <span className="text-xs font-medium">Course Overview</span>
+    </Link>
+  );
+
   // ── FREEFORM ──────────────────────────────────────────────────────────────
   if (!isStructured) {
     return (
       <nav className="flex-1 px-2 py-3 space-y-px">
-        <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] px-2.5 mb-2">
+        {OverviewLink}
+        <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] px-2.5 mb-2 mt-2">
           Modules · {modules.length}
         </p>
         {modules.map((mod, idx) => {
           const isActive = mod.slug === activeModSlug &&
             modules.findIndex((m) => m.slug === activeModSlug) === idx;
           return (
-            <Link key={`${mod.slug}-${idx}`}
+            <Link
+              key={`${mod.slug}-${idx}`}
               href={`/courses/${course.slug}/${mod.slug}`}
               onClick={onNavigate}
               className={[
@@ -55,8 +91,10 @@ export default function CourseSidebar({
               ].join(" ")}
             >
               {isActive && (
-                <motion.span layoutId="sidebar-indicator"
-                  className="absolute left-0 top-2 bottom-2 w-[3px] bg-[#3A5EFF] rounded-r-full" />
+                <motion.span
+                  layoutId="sidebar-indicator"
+                  className="absolute left-0 top-2 bottom-2 w-[3px] bg-[#3A5EFF] rounded-r-full"
+                />
               )}
               <span className={[
                 "shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-px",
@@ -77,7 +115,9 @@ export default function CourseSidebar({
 
   return (
     <nav className="flex-1 px-2 py-3">
-      <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] px-2.5 mb-2">
+      {OverviewLink}
+
+      <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] px-2.5 mb-2 mt-2">
         {modules.length} module{modules.length !== 1 ? "s" : ""} · {totalLessons} lesson{totalLessons !== 1 ? "s" : ""}
       </p>
 
@@ -87,12 +127,11 @@ export default function CourseSidebar({
           const isModActive = mod.slug === activeModSlug;
           const isOpen      = expanded.has(mod.slug);
 
-          // Count completed lessons in this module
           const modCompleted = lessons.filter((l, li) =>
             completedSet.has(`${mod.slug}::${lessonSlug(l, li)}`)
           ).length;
-          const modTotal     = lessons.length;
-          const modAllDone   = modTotal > 0 && modCompleted === modTotal;
+          const modTotal   = lessons.length;
+          const modAllDone = modTotal > 0 && modCompleted === modTotal;
 
           const hasMCQ        = (mod.mcqQuestions?.length     ?? 0) > 0;
           const hasChallenges = (mod.codingChallenges?.length ?? 0) > 0;
@@ -109,7 +148,6 @@ export default function CourseSidebar({
                   isModActive ? "bg-[var(--bg-active)]" : "hover:bg-[var(--bg-hover)]",
                 ].join(" ")}
               >
-                {/* Module number / done indicator */}
                 <span className={[
                   "shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold",
                   modAllDone
@@ -123,12 +161,13 @@ export default function CourseSidebar({
 
                 <span className={[
                   "flex-1 text-xs font-medium leading-snug text-left line-clamp-2",
-                  isModActive ? "text-[var(--text-primary)]" : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]",
+                  isModActive
+                    ? "text-[var(--text-primary)]"
+                    : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]",
                 ].join(" ")}>
                   {mod.title}
                 </span>
 
-                {/* X/Y count */}
                 {modTotal > 0 && (
                   <span className={`shrink-0 text-[9px] font-medium ${
                     modAllDone ? "text-emerald-500" : "text-[var(--text-disabled)]"
@@ -138,7 +177,9 @@ export default function CourseSidebar({
                 )}
 
                 <span className="shrink-0 text-[var(--text-disabled)]">
-                  {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                  {isOpen
+                    ? <ChevronDown  className="w-3 h-3" />
+                    : <ChevronRight className="w-3 h-3" />}
                 </span>
               </button>
 
@@ -151,7 +192,8 @@ export default function CourseSidebar({
                     const isDone   = completedSet.has(`${mod.slug}::${lSlug}`);
 
                     return (
-                      <Link key={li}
+                      <Link
+                        key={li}
                         href={`/courses/${course.slug}/${mod.slug}/${lSlug}`}
                         onClick={onNavigate}
                         className={[
@@ -162,11 +204,12 @@ export default function CourseSidebar({
                         ].join(" ")}
                       >
                         {isActive && (
-                          <motion.span layoutId="lesson-indicator"
-                            className="absolute left-0 top-1.5 bottom-1.5 w-[2px] bg-[#3A5EFF] rounded-r-full" />
+                          <motion.span
+                            layoutId="lesson-indicator"
+                            className="absolute left-0 top-1.5 bottom-1.5 w-[2px] bg-[#3A5EFF] rounded-r-full"
+                          />
                         )}
 
-                        {/* Check or lesson number */}
                         <span className={[
                           "shrink-0 w-4 h-4 rounded flex items-center justify-center text-[9px] font-bold",
                           isDone
@@ -177,12 +220,13 @@ export default function CourseSidebar({
                         ].join(" ")}>
                           {isDone
                             ? <Check className="w-2.5 h-2.5" />
-                            : lesson.lessonNumber ?? `${li + 1}`
-                          }
+                            : lesson.lessonNumber ?? `${li + 1}`}
                         </span>
 
                         <span className={`text-[11px] leading-snug line-clamp-2 flex-1 ${
-                          isDone ? "text-[var(--text-disabled)] line-through decoration-[var(--text-disabled)]" : ""
+                          isDone
+                            ? "text-[var(--text-disabled)] line-through decoration-[var(--text-disabled)]"
+                            : ""
                         }`}>
                           {lesson.title}
                         </span>
@@ -217,7 +261,9 @@ export default function CourseSidebar({
 
               {isOpen && lessons.length === 0 && (
                 <div className="ml-4 pl-3 border-l border-[var(--border-subtle)] mt-px mb-1">
-                  <p className="text-[10px] text-[var(--text-disabled)] italic px-2.5 py-2">No lessons yet</p>
+                  <p className="text-[10px] text-[var(--text-disabled)] italic px-2.5 py-2">
+                    No lessons yet
+                  </p>
                 </div>
               )}
             </div>

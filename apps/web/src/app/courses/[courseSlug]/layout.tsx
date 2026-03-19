@@ -5,7 +5,7 @@ import CourseShell from "./[moduleSlug]/_components/CourseShell";
 
 interface Props {
   children: React.ReactNode;
-  params: Promise<{ courseSlug: string }>;
+  params:   Promise<{ courseSlug: string }>;
 }
 
 export default async function CourseLayout({ children, params }: Props) {

@@ -108,6 +108,16 @@ html, body {
   scrollbar-width: none;
 }
 
+/* Hide scrollbar on ALL scrollable elements, not just html/body */
+*::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }

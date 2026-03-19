@@ -2,8 +2,13 @@ import { api } from "../../../../../../../../packages/convex/convex/_generated/a
 import { fetchQuery } from "convex/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
-import LessonContent    from "../_components/LessonContent";
+import type { Metadata } from "next";
+import LessonContent      from "../_components/LessonContent";
 import AssessmentsContent from "../_components/AssessmentsContent";
+import {
+  lessonMetadata, assessmentMetadata,
+  lessonJsonLd,
+} from "../../../../seoHelpers";
 import { Course, Lesson } from "../../../courseTypes";
 
 interface Props {
@@ -18,22 +23,33 @@ function makeLessonSlug(lesson: Lesson, idx: number): string {
   return base || `lesson-${idx + 1}`;
 }
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { courseSlug, moduleSlug, lessonSlug } = await params;
-  const course = await fetchQuery(api.courses.getCourseBySlug, { slug: courseSlug }) as Course | null;
-  const mod    = course?.modules?.find((m) => m.slug === moduleSlug);
-  if (!mod) return { title: "Course" };
-  if (lessonSlug === "assessments") return { title: `Assessment — ${mod.title} — ${course!.title}` };
+  const course = await fetchQuery(api.courses.getCourseBySlug, {
+    slug: courseSlug,
+  }) as Course | null;
+
+  if (!course) return { title: "Course" };
+
+  const mod = course.modules?.find((m) => m.slug === moduleSlug);
+  if (!mod)  return { title: course.title };
+
+  if (lessonSlug === "assessments") return assessmentMetadata(course, mod);
+
   const lessons   = [...(mod.lessons ?? [])].sort((a, b) => a.order - b.order);
   const lessonIdx = lessons.findIndex((l, i) => makeLessonSlug(l, i) === lessonSlug);
   const lesson    = lessons[lessonIdx];
-  return { title: lesson ? `${lesson.title} — ${mod.title} — ${course!.title}` : "Lesson" };
+
+  if (!lesson) return { title: `${mod.title} — ${course.title}` };
+  return lessonMetadata(course, mod, lesson, lessonSlug);
 }
 
 export default async function LessonPage({ params }: Props) {
   const { courseSlug, moduleSlug, lessonSlug } = await params;
 
-  const course = await fetchQuery(api.courses.getCourseBySlug, { slug: courseSlug }) as Course | null;
+  const course = await fetchQuery(api.courses.getCourseBySlug, {
+    slug: courseSlug,
+  }) as Course | null;
   if (!course) notFound();
 
   const seen = new Set<string>();
@@ -77,26 +93,35 @@ export default async function LessonPage({ params }: Props) {
   try {
     const { userId } = await auth();
     if (userId) {
-      const progress = await fetchQuery(api.courses.getLessonProgress, { courseSlug }) as ProgressRow[];
+      const progress = await fetchQuery(api.courses.getLessonProgress, {
+        courseSlug,
+      }) as ProgressRow[];
       isCompleted = progress.some(
         (r) => r.moduleSlug === moduleSlug && r.lessonSlug === lessonSlug
       );
     }
   } catch {
-    // auth not available server-side in this env — handled client-side
   }
 
+  const jsonLd = lessonJsonLd(course, mod, lesson, lessonSlug);
+
   return (
-    <LessonContent
-      courseSlug={courseSlug}
-      mod={mod}
-      modIndex={modIndex}
-      totalModules={modules.length}
-      lesson={lesson}
-      lessonIndex={lessonIndex}
-      prevLesson={prevLesson}
-      nextLesson={nextLesson}
-      isCompleted={isCompleted}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <LessonContent
+        courseSlug={courseSlug}
+        mod={mod}
+        modIndex={modIndex}
+        totalModules={modules.length}
+        lesson={lesson}
+        lessonIndex={lessonIndex}
+        prevLesson={prevLesson}
+        nextLesson={nextLesson}
+        isCompleted={isCompleted}
+      />
+    </>
   );
 }

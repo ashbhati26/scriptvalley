@@ -17,8 +17,8 @@ interface Props {
 
 export default function CourseShell({ course, children }: Props) {
   const params           = useParams();
-  const activeModSlug    = params.moduleSlug   as string;
-  const activeLessonSlug = params.lessonSlug   as string | undefined;
+  const activeModSlug    = params.moduleSlug as string | undefined;
+  const activeLessonSlug = params.lessonSlug as string | undefined;
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const progressRows = useQuery(
@@ -26,7 +26,6 @@ export default function CourseShell({ course, children }: Props) {
     { courseSlug: course.slug }
   ) ?? [];
 
-  // Build a Set of "moduleSlug::lessonSlug" for O(1) lookups in sidebar
   const completedSet = new Set<string>(
     progressRows.map((r: { moduleSlug: string; lessonSlug: string }) =>
       `${r.moduleSlug}::${r.lessonSlug}`
@@ -35,16 +34,19 @@ export default function CourseShell({ course, children }: Props) {
 
   const sidebarProps = {
     course,
-    activeModSlug,
+    activeModSlug:    activeModSlug ?? "",
     activeLessonSlug,
     completedSet,
-    onNavigate: () => {},
+    onNavigate:       () => {},
   };
 
   return (
-    <div className="flex mt-16 overflow-hidden min-h-[calc(100vh-3rem)] bg-[var(--bg-base)]">
+    // mt-16 = navbar height. h-[calc(100vh-4rem)] fills exactly the remaining viewport.
+    // overflow-hidden on root prevents the page itself from scrolling —
+    // only sidebar and main scroll independently.
+    <div className="flex mt-16 h-[calc(100vh-4rem)] overflow-hidden bg-[var(--bg-base)]">
 
-      {/* ── Mobile drawer backdrop ───────────────────────────────────────── */}
+      {/* ── Mobile drawer ─────────────────────────────────────────────────── */}
       <AnimatePresence>
         {drawerOpen && (
           <>
@@ -58,46 +60,62 @@ export default function CourseShell({ course, children }: Props) {
               key="drawer"
               initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
               transition={{ type: "spring", damping: 28, stiffness: 280 }}
-              className="fixed left-0 top-0 bottom-0 z-100 w-72 bg-[var(--bg-base)] border-r border-[var(--border-subtle)] md:hidden overflow-y-auto"
+              className="fixed left-0 top-0 bottom-0 z-[100] w-72 bg-[var(--bg-base)] border-r border-[var(--border-subtle)] md:hidden flex flex-col"
             >
-              <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--border-subtle)]">
-                <span className="text-xs font-medium text-[var(--text-muted)] truncate">{course.title}</span>
-                <button onClick={() => setDrawerOpen(false)}
-                  className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--bg-hover)]">
+              <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--border-subtle)] shrink-0">
+                <span className="text-xs font-medium text-[var(--text-muted)] truncate">
+                  {course.title}
+                </span>
+                <button
+                  onClick={() => setDrawerOpen(false)}
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <CourseSidebar {...sidebarProps} onNavigate={() => setDrawerOpen(false)} />
+              {/* Drawer scrolls independently */}
+              <div className="flex-1 overflow-y-auto">
+                <CourseSidebar {...sidebarProps} onNavigate={() => setDrawerOpen(false)} />
+              </div>
             </motion.aside>
           </>
         )}
       </AnimatePresence>
 
-      {/* ── Desktop sidebar ──────────────────────────────────────────────── */}
-      <aside className="hidden md:flex flex-col w-72 shrink-0 border-r border-[var(--border-subtle)] sticky top-0 h-[calc(100vh-3rem)] overflow-y-auto scrollbar-hide">
-        <div className="px-4 py-4 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-base)] z-10">
-          <Link href="/courses"
-            className="flex items-center gap-1.5 text-[10px] text-[var(--text-disabled)] hover:text-[var(--text-faint)] transition-colors mb-2">
+      {/* ── Desktop sidebar — fixed, scrolls independently ──────────────── */}
+      <aside className="hidden md:flex flex-col w-72 shrink-0 border-r border-[var(--border-subtle)] h-full overflow-hidden">
+
+        {/* Sidebar header — stays pinned */}
+        <div className="px-4 py-4 border-b border-[var(--border-subtle)] shrink-0 bg-[var(--bg-base)]">
+          <Link
+            href="/courses"
+            className="flex items-center gap-1.5 text-[10px] text-[var(--text-disabled)] hover:text-[var(--text-faint)] transition-colors mb-3"
+          >
             <ChevronLeft className="w-3 h-3" />All Courses
           </Link>
+
           <div className="flex items-start gap-2.5">
             <div className="w-7 h-7 rounded-md bg-[rgba(58,94,255,0.08)] border border-[rgba(58,94,255,0.2)] flex items-center justify-center shrink-0 mt-0.5">
               <BookOpen className="w-3.5 h-3.5 text-[#3A5EFF]" />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] mb-0.5">Course</p>
-              <h2 className="text-sm font-semibold text-[var(--text-primary)] leading-snug">{course.title}</h2>
+              <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] mb-0.5">
+                Course
+              </p>
+              <h2 className="text-sm font-semibold text-[var(--text-primary)] leading-snug">
+                {course.title}
+              </h2>
             </div>
           </div>
 
-          {/* Overall progress bar */}
+          {/* Progress bar — structured courses only */}
           {course.template === "structured" && (() => {
             const total = (course.modules ?? []).reduce((s, m) => s + (m.lessons?.length ?? 0), 0);
             const done  = completedSet.size;
             const pct   = total > 0 ? Math.floor((done / total) * 100) : 0;
             return total > 0 ? (
               <div className="mt-3">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[10px] text-[var(--text-disabled)]">Progress</span>
                   <span className="text-[10px] font-medium text-[var(--text-faint)]">{done}/{total}</span>
                 </div>
@@ -112,21 +130,29 @@ export default function CourseShell({ course, children }: Props) {
           })()}
         </div>
 
-        <CourseSidebar {...sidebarProps} />
+        {/* Sidebar nav — scrolls independently */}
+        <div className="flex-1 overflow-y-auto">
+          <CourseSidebar {...sidebarProps} />
+        </div>
       </aside>
 
-      {/* ── Main content ─────────────────────────────────────────────────── */}
+      {/* ── Main content — scrolls independently ────────────────────────── */}
       <main className="flex-1 min-w-0 overflow-y-auto">
+
         {/* Mobile topbar */}
         <div className="md:hidden flex items-center gap-2 px-4 h-12 border-b border-[var(--border-subtle)] bg-[var(--bg-base)] sticky top-0 z-20">
-          <button onClick={() => setDrawerOpen(true)}
-            className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--bg-hover)]">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
             <Menu className="w-4 h-4" />
           </button>
-          <span className="text-xs font-medium text-[var(--text-muted)] truncate">{course.title}</span>
+          <span className="text-xs font-medium text-[var(--text-muted)] truncate">
+            {course.title}
+          </span>
         </div>
 
-        <div className="max-w-3xl mx-auto w-full mt-0 md:mt-0">
+        <div className="max-w-3xl mx-auto w-full">
           {children}
         </div>
       </main>

@@ -1,117 +1,69 @@
-"use client";
-
-import { useParams } from "next/navigation";
-import { useState } from "react";
-import { useUser } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
+import type { Metadata } from "next";
+import { fetchQuery } from "convex/nextjs";
 import { api } from "../../../../../../packages/convex/convex/_generated/api";
-import SheetHeader from "../_components/SheetHeader";
-import TopicSection from "../_components/TopicSection";
-import SheetProgressCard from "../_components/SheetProgressCard";
-import FilterTabs from "../_components/FilterTabs";
-import { computeProgress } from "@/app/dsa-sheet/lib/computeProgress";
-import { useNotes } from "@/hooks/useNotes";
-import { DSASheet } from "../types";
-import DSASheetPageSkeleton from "../_components/Dsasheetpageskeleton";
+import { notFound } from "next/navigation";
+import { dsaSheetMetadata, dsaSheetJsonLd } from "../../seoHelpers";
+import DSASheetPage from "../_components/DSASheetPage";
 
-export default function DSASheetPage() {
-  const { user }     = useUser();
-  const isLoggedIn   = !!user;
-  const userId       = user?.id ?? "";
-  const params       = useParams();
-  const sheetSlug    = params.sheetId as string;
+type Question = {
+  id?: string;
+};
 
-  const sheet = useQuery(api.sheets.getBySlug, { slug: sheetSlug }) as DSASheet | undefined;
+type Topic = {
+  topic: string;
+  questions: Question[];
+};
 
-  const [openTopics,    setOpenTopics]    = useState<string[]>([]);
-  const [filter,        setFilter]        = useState<"All" | "Easy" | "Medium" | "Hard">("All");
-  const [localAttempts, setLocalAttempts] = useState<Record<string, boolean>>({});
+type Sheet = {
+  name: string;
+  slug: string;
+  description?: string;
+  topics?: Topic[];
+};
 
-  const recordAttempt = useMutation(api.progress.recordAttempt);
-  const attempts      = useQuery(api.progress.getAttempts, user ? { userId } : "skip");
-  const { getNotes, updateNotes, isSaving } = useNotes();
+interface Props {
+  params: Promise<{ sheetId: string }>;
+}
 
-  const handleNotesUpdate = async (_topic: string, _questionTitle: string, notes: string) => {
-    try { await updateNotes(_questionTitle, notes); }
-    catch (err) { console.error("Failed to update notes:", err); }
-  };
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { sheetId } = await params;
+  try {
+    const sheet = (await fetchQuery(api.sheets.getBySlug, {
+      slug: sheetId,
+    })) as Sheet | null;
 
-  if (sheet === undefined) return <DSASheetPageSkeleton />;
+    if (!sheet) return { title: "Sheet Not Found" };
 
-  if (!sheet) {
-    return (
-      <div className="min-h-screen bg-[var(--bg-base)] flex items-center justify-center">
-        <div className="text-center space-y-2">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)]">404</p>
-          <p className="text-sm text-[var(--text-faint)]">Sheet not found</p>
-        </div>
-      </div>
-    );
+    return dsaSheetMetadata(sheet);
+  } catch {
+    return { title: "DSA Sheet — Script Valley" };
   }
+}
 
-  const toggleTopic = (topicName: string) => {
-    setOpenTopics((prev) =>
-      prev.includes(topicName) ? prev.filter((t) => t !== topicName) : [...prev, topicName],
-    );
-  };
+export default async function DSASheetDetailPage({ params }: Props) {
+  const { sheetId } = await params;
 
-  const handleToggle = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    topicName: string,
-    questionTitle: string,
-    difficulty: string,
-  ) => {
-    const attempted = e.target.checked;
-    setLocalAttempts((prev) => ({ ...prev, [`${topicName}_${questionTitle}`]: attempted }));
-    try { await recordAttempt({ userId, questionTitle, sheetSlug, difficulty, attempted }); }
-    catch (err) { console.error("recordAttempt failed", err); }
-  };
+  let sheet: Sheet | null = null;
 
-  const totalFilteredQuestions = (sheet.topics ?? []).reduce((acc, topic) => {
-    return acc + topic.questions.filter((q) => filter === "All" || q.difficulty === filter).length;
-  }, 0);
+  try {
+    sheet = (await fetchQuery(api.sheets.getBySlug, {
+      slug: sheetId,
+    })) as Sheet | null;
+  } catch {}
 
-  const progressData = computeProgress({ sheet, localAttempts, attempts });
+  if (sheet === null) notFound();
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)]">
-      <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 mt-14 mb-16 space-y-8">
-
-        <SheetHeader sheet={sheet} />
-
-        <SheetProgressCard progress={progressData} topics={sheet.topics} />
-
-        <div className="flex items-center justify-between gap-4">
-          <FilterTabs filter={filter} setFilter={setFilter} />
-          <span className="shrink-0 text-[10px] uppercase tracking-widest text-[var(--text-disabled)]">
-            {totalFilteredQuestions}q
-          </span>
-        </div>
-
-        <div className="border-t border-[var(--border-subtle)]" />
-
-        <div className="space-y-2">
-          {sheet.topics.map((topic, index) => (
-            <TopicSection
-              key={topic.topic}
-              topic={topic}
-              index={index}
-              isOpen={openTopics.includes(topic.topic)}
-              toggleTopic={toggleTopic}
-              filter={filter}
-              attempts={attempts ?? []}
-              localAttempts={localAttempts}
-              handleToggle={handleToggle}
-              sheetId={sheet.slug}
-              onNotesUpdate={handleNotesUpdate}
-              isSaving={isSaving}
-              getNotes={getNotes}
-              isLoggedIn={isLoggedIn}
-            />
-          ))}
-        </div>
-
-      </div>
-    </div>
+    <>
+      {sheet && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(dsaSheetJsonLd(sheet)),
+          }}
+        />
+      )}
+      <DSASheetPage />
+    </>
   );
 }

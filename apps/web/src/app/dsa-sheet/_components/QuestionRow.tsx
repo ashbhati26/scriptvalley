@@ -1,8 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
-import { ClipboardCheck, ClipboardPen, Star } from "lucide-react";
+import { ClipboardCheck, ClipboardPen, Star, ExternalLink } from "lucide-react";
 import { CiLock } from "react-icons/ci";
 import NotesModal from "./NotesModal";
 import { useNotes } from "@/hooks/useNotes";
@@ -12,27 +11,66 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../../../packages/convex/convex/_generated/api";
 
 interface Question {
-  title: string;
+  title:      string;
   difficulty: "Easy" | "Medium" | "Hard" | string;
-  link: { platform: string; url: string };
+  link?:      { platform?: string; url?: string } | null;
 }
 
 interface QuestionRowProps {
-  question: Question;
-  isLast: boolean;
-  attempted: boolean;
+  question:     Question;
+  isLast:       boolean;
+  attempted:    boolean;
   handleToggle: (e: React.ChangeEvent<HTMLInputElement>, questionTitle: string) => void;
-  sheetId: string;
-  topic: string;
-  isLoggedIn: boolean;
+  sheetId:      string;
+  topic:        string;
+  isLoggedIn:   boolean;
 }
 
-// Difficulty badge styles — semantic data colors, intentionally hardcoded
 const DIFF_STYLE: Record<string, string> = {
   Easy:   "text-[#22c55e] bg-[#22c55e0d] border-[#22c55e25]",
   Medium: "text-[#f59e0b] bg-[#f59e0b0d] border-[#f59e0b25]",
-  Hard:   "text-red-400   bg-red-500/[0.05] border-red-500/20",
+  Hard:   "text-red-400 bg-red-500/[0.05] border-red-500/20",
 };
+
+function PlatformIcon({ platform }: { platform?: string }) {
+  const [imgError, setImgError] = useState(false);
+  const key = (platform ?? "").toLowerCase();
+
+  const FALLBACK: Record<string, { label: string; color: string }> = {
+    leetcode:     { label: "LC",  color: "#f89f1b" },
+    gfg:          { label: "GFG", color: "#2f8d46" },
+    codingninjas: { label: "CN",  color: "#f4813f" },
+    hackerrank:   { label: "HR",  color: "#2ec866" },
+    codeforces:   { label: "CF",  color: "#1f8acb" },
+  };
+
+  if (!imgError && key) {
+    return (
+      <img
+        src={`/${key}.png`}
+        alt={key}
+        width={16}
+        height={16}
+        className="object-contain opacity-80 hover:opacity-100 transition-opacity w-4 h-4"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  const meta = FALLBACK[key];
+  if (meta) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-bold leading-none"
+        style={{ background: `${meta.color}18`, color: meta.color, border: `1px solid ${meta.color}30` }}
+      >
+        {meta.label}
+      </span>
+    );
+  }
+
+  return <ExternalLink className="w-3.5 h-3.5 text-[var(--text-disabled)]" />;
+}
 
 export default function QuestionRow({
   question, attempted, handleToggle, sheetId, topic, isLoggedIn,
@@ -42,33 +80,39 @@ export default function QuestionRow({
   const noteContent = getNotes(question.title);
 
   const { user } = useUser();
-  const userId = user?.id ?? "";
+  const userId   = user?.id ?? "";
 
-  const isStarred =
-    useQuery(
-      api.starred.isStarred,
-      isLoggedIn ? { userId, questionTitle: question.title } : "skip",
-    ) ?? false;
+  const isStarred = useQuery(
+    api.starred.isStarred,
+    isLoggedIn && userId ? { userId, questionTitle: question.title } : "skip",
+  ) ?? false;
 
   const toggleStar = useMutation(api.starred.toggleStar);
 
   const handleStar = async () => {
-    if (!isLoggedIn) { toast.error("Login to star questions"); return; }
+    if (!isLoggedIn || !userId) { toast.error("Login to star questions"); return; }
     try {
-      await toggleStar({ userId, sheetSlug: sheetId, topic, questionTitle: question.title });
+      await toggleStar({
+        userId,
+        sheetSlug:     sheetId,
+        topic,
+        questionTitle: question.title,
+      });
     } catch {
       toast.error("Failed to star question");
     }
   };
 
-  const diffClass = DIFF_STYLE[question.difficulty] ?? "text-[var(--text-faint)] bg-[var(--bg-hover)] border-[var(--border-subtle)]";
+  const linkUrl      = question.link?.url      ?? "#";
+  const linkPlatform = question.link?.platform;
+
+  const diffClass = DIFF_STYLE[question.difficulty]
+    ?? "text-[var(--text-faint)] bg-[var(--bg-hover)] border-[var(--border-subtle)]";
 
   return (
     <>
-      <div
-        className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 text-sm transition-colors duration-100 hover:bg-[var(--bg-elevated)] border-t border-[var(--border-default)]`}
-      >
-        {/* Checkbox + Title */}
+      <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 text-sm transition-colors duration-100 hover:bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)]">
+
         <div className="flex items-center gap-2.5 min-w-0">
           {isLoggedIn ? (
             <input
@@ -82,7 +126,9 @@ export default function QuestionRow({
               <CiLock className="w-3.5 h-3.5 text-[var(--text-disabled)]" />
             </button>
           )}
-          <span className={`text-sm leading-snug truncate ${attempted ? "line-through text-[var(--text-disabled)]" : "text-[var(--text-secondary)]"}`}>
+          <span className={`text-sm leading-snug truncate ${
+            attempted ? "line-through text-[var(--text-disabled)]" : "text-[var(--text-secondary)]"
+          }`}>
             {question.title}
           </span>
         </div>
@@ -91,18 +137,12 @@ export default function QuestionRow({
         <div className="flex justify-center w-12">
           {isLoggedIn ? (
             <a
-              href={question.link.url}
+              href={linkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1.5 rounded-md text-[var(--text-faint)] hover:bg-[var(--bg-hover)] transition-colors duration-100"
+              className="p-1.5 rounded-md text-[var(--text-faint)] hover:bg-[var(--bg-hover)] transition-colors duration-100 flex items-center justify-center"
             >
-              <Image
-                src={`/${question.link.platform}.png`}
-                alt={question.link.platform}
-                width={16}
-                height={16}
-                className="object-contain opacity-70 hover:opacity-100 transition-opacity"
-              />
+              <PlatformIcon platform={linkPlatform} />
             </a>
           ) : (
             <CiLock className="w-3.5 h-3.5 text-[var(--text-disabled)]" />
@@ -130,7 +170,7 @@ export default function QuestionRow({
           )}
         </div>
 
-        {/* Star — amber is a semantic color, intentionally hardcoded */}
+        {/* Star */}
         <div className="flex justify-center w-12">
           <button
             onClick={handleStar}
@@ -158,7 +198,7 @@ export default function QuestionRow({
           onClose={() => setModalOpen(false)}
           onSave={(content) => updateNotes(question.title, content)}
           onDelete={() => deleteNotes(question.title)}
-          initialNotes={noteContent}
+          initialNotes={noteContent ?? ""}
           questionTitle={question.title}
           isSaving={isSaving}
         />
