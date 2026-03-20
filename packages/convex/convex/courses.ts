@@ -389,3 +389,22 @@ export const resetModuleProgress = mutation({
     return { ok: true, deleted: toDelete.length };
   },
 });
+
+// Step 1 — frontend asks for a short-lived upload URL.
+// The file is PUT directly to Convex storage (never passes through your server).
+export const generateImageUploadUrl = mutation({
+  handler: async (ctx) => {
+    await requireInstructor(ctx.db, ctx.auth);   // only logged-in instructors can upload
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+ 
+// Step 2 — after the PUT succeeds, exchange the storageId for a permanent URL.
+export const saveUploadedImage = mutation({
+  args: { storageId: v.string() },
+  handler: async (ctx, { storageId }) => {
+    await requireInstructor(ctx.db, ctx.auth);
+    const url = await ctx.storage.getUrl(storageId as any);
+    return url;                   // permanent public URL — safe to embed in TipTap HTML
+  },
+});

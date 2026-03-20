@@ -21,11 +21,12 @@ import {
   Bold, Italic, UnderlineIcon, Strikethrough,
   Code, Link2, RemoveFormatting, Highlighter,
 } from "lucide-react";
-import EditorSlashMenu from "./EditorSlashMenu";
-import EditorToolbar from "./EditorToolbar";
+import EditorSlashMenu   from "./EditorSlashMenu";
+import EditorToolbar     from "./EditorToolbar";
+import ImageUploadModal  from "./ImageUploadModal";    // ← new
 
 interface NotesEditorProps {
-  content: string;
+  content:  string;
   onChange: (html: string) => void;
 }
 
@@ -122,9 +123,13 @@ function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) 
 }
 
 export default function NotesEditor({ content, onChange }: NotesEditorProps) {
-  const [slashOpen,  setSlashOpen]  = useState(false);
-  const [slashQuery, setSlashQuery] = useState("");
-  const [slashPos,   setSlashPos]   = useState({ top: 0, left: 0 });
+  const [slashOpen,       setSlashOpen]       = useState(false);
+  const [slashQuery,      setSlashQuery]      = useState("");
+  const [slashPos,        setSlashPos]        = useState({ top: 0, left: 0 });
+  // ─── Image upload modal state ─────────────────────────────────────────────
+  const [imageModalOpen,  setImageModalOpen]  = useState(false);
+  const [pendingSlashDel, setPendingSlashDel] = useState<{ from: number; len: number } | null>(null);
+
   const editorRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
@@ -164,42 +169,29 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
       attributes: {
         class: [
           "outline-none min-h-full px-7 md:px-14 py-8 scrollbar-hide max-w-3xl",
-          // Base text — theme-aware
           "text-sm text-(--text-secondary) leading-7",
-          // Headings — theme-aware
           "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-(--text-primary) [&_h1]:mt-8 [&_h1]:mb-3 [&_h1]:tracking-tight",
           "[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-(--text-primary) [&_h2]:mt-7 [&_h2]:mb-2.5",
           "[&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-(--text-secondary) [&_h3]:mt-5 [&_h3]:mb-1.5",
-          // Paragraph
           "[&_p]:my-1.5 [&_p]:text-(--text-secondary) [&_p]:leading-7",
-          // Lists
           "[&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1.5",
           "[&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1.5",
           "[&_li]:my-0.5 [&_li]:text-(--text-secondary)",
-          // Task list
           "[&_ul[data-type=taskList]]:list-none [&_ul[data-type=taskList]]:pl-0",
           "[&_li[data-type=taskItem]]:flex [&_li[data-type=taskItem]]:items-start [&_li[data-type=taskItem]]:gap-2 [&_li[data-type=taskItem]]:my-1",
           "[&_li[data-type=taskItem]>label]:flex [&_li[data-type=taskItem]>label]:items-center [&_li[data-type=taskItem]>label]:pt-0.5",
           "[&_li[data-type=taskItem]>label>input[type=checkbox]]:accent-[#3A5EFF] [&_li[data-type=taskItem]>label>input[type=checkbox]]:w-3.5 [&_li[data-type=taskItem]>label>input[type=checkbox]]:h-3.5 [&_li[data-type=taskItem]>label>input[type=checkbox]]:cursor-pointer",
           "[&_li[data-type=taskItem][data-checked=true]>div]:line-through [&_li[data-type=taskItem][data-checked=true]>div]:text-(--text-disabled)",
-          // Blockquote — brand blue accent kept intentionally
           "[&_blockquote]:border-l-[3px] [&_blockquote]:border-[#3A5EFF]/50 [&_blockquote]:pl-4 [&_blockquote]:my-4 [&_blockquote]:text-(--text-muted) [&_blockquote]:italic",
-          // Inline code — brand color for text, surface-aware bg
           "[&_code]:bg-(--bg-input) [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[#3A5EFF] [&_code]:text-xs [&_code]:font-mono",
-          // Code block — elevated surface, surface-aware
           "[&_pre]:bg-(--bg-elevated) [&_pre]:border [&_pre]:border-(--border-subtle) [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:my-4 [&_pre]:overflow-x-auto",
           "[&_pre_code]:bg-transparent [&_pre_code]:text-(--text-faint) [&_pre_code]:p-0 [&_pre_code]:text-xs",
-          // Links
           "[&_a]:text-[#3A5EFF] [&_a]:no-underline [&_a]:hover:underline",
-          // Images
           "[&_img]:rounded-lg [&_img]:max-w-full [&_img]:my-4 [&_img]:border [&_img]:border-(--border-subtle)",
-          // Table
           "[&_table]:border-collapse [&_table]:w-full [&_table]:my-4",
           "[&_td]:border [&_td]:border-(--border-subtle) [&_td]:px-3 [&_td]:py-2 [&_td]:text-sm [&_td]:text-(--text-secondary) [&_td]:align-top",
           "[&_th]:border [&_th]:border-(--border-subtle) [&_th]:px-3 [&_th]:py-2 [&_th]:bg-(--bg-input) [&_th]:text-xs [&_th]:font-semibold [&_th]:text-(--text-muted)",
-          // HR
           "[&_hr]:border-(--border-subtle) [&_hr]:my-6",
-          // Placeholder
           "[&_.is-editor-empty:first-child::before]:text-(--text-disabled)",
           "[&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
           "[&_.is-editor-empty:first-child::before]:float-left",
@@ -255,10 +247,22 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
 
   if (!editor) return null;
 
+  /* ── Slash-command execution ─────────────────────────────────────────────── */
+
   const execSlashCommand = (cmd: string) => {
     const { from } = editor.state.selection;
     const deleteLen = slashQuery.length + 1;
     editor.chain().focus().deleteRange({ from: from - deleteLen, to: from }).run();
+
+    if (cmd === "image") {
+      // Record cursor position so we can clean up the slash text before the modal.
+      // (Already deleted above — just open the modal.)
+      setPendingSlashDel(null);
+      setSlashOpen(false);
+      setImageModalOpen(true);
+      return;
+    }
+
     switch (cmd) {
       case "h1":      editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
       case "h2":      editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
@@ -270,30 +274,42 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
       case "code":    editor.chain().focus().toggleCodeBlock().run();           break;
       case "divider": editor.chain().focus().setHorizontalRule().run();        break;
       case "table":   editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); break;
-      case "image": {
-        const url = window.prompt("Enter image URL:");
-        if (url) editor.chain().focus().setImage({ src: url }).run();
-        break;
-      }
     }
     setSlashOpen(false);
   };
 
+  /* ── Image insert callback (from modal) ─────────────────────────────────── */
+
+  function handleImageInsert(url: string) {
+    setImageModalOpen(false);
+    editor?.chain().focus().setImage({ src: url }).run();
+  }
+
   return (
-    <div className="flex flex-col rounded-none overflow-visible">
-      <EditorToolbar editor={editor} />
-      <div className="relative" ref={editorRef}>
-        <EditorContent editor={editor} />
-        <InlineBubbleMenu editor={editor} />
-        {slashOpen && (
-          <EditorSlashMenu
-            query={slashQuery}
-            position={slashPos}
-            onSelect={execSlashCommand}
-            onClose={() => setSlashOpen(false)}
-          />
-        )}
+    <>
+      <div className="flex flex-col rounded-none overflow-visible">
+        <EditorToolbar editor={editor} />
+        <div className="relative" ref={editorRef}>
+          <EditorContent editor={editor} />
+          <InlineBubbleMenu editor={editor} />
+          {slashOpen && (
+            <EditorSlashMenu
+              query={slashQuery}
+              position={slashPos}
+              onSelect={execSlashCommand}
+              onClose={() => setSlashOpen(false)}
+            />
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Image upload modal — rendered outside the editor div to avoid z-index issues */}
+      {imageModalOpen && (
+        <ImageUploadModal
+          onInsert={handleImageInsert}
+          onClose={() => setImageModalOpen(false)}
+        />
+      )}
+    </>
   );
 }
