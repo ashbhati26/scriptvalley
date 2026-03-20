@@ -22,7 +22,7 @@ export default function BasicInfoForm() {
   const userId               = user?.id ?? "";
 
   const rawUserData     = useQuery(api.users.getUser, userId ? { userId } : "skip");
-  const updateBasicInfo = useMutation(api.basicInfo.updateBasicInfo);
+  const updateBasicInfo = useMutation(api.users.updateBasicInfo);
 
   const [formData, setFormData] = useState<FormState>({
     name: "", email: "", phoneNumber: "", collegeName: "", state: "", country: "",

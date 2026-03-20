@@ -7,11 +7,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Menu, X, LayoutDashboard, ChevronDown,
 } from "lucide-react";
-import { useUser } from "@clerk/nextjs";                          // ← kept, no SignInButton/UserButton
+import { useUser } from "@clerk/nextjs";
 import { exploreItems } from "@/app/dsa-sheet/data/explore-items";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuthModal } from "@/components/providers/AuthModalProvider"; // ← new
-import UserDropdown from "@/components/UserDropdown";                    // ← new
+import { useAuthModal } from "@/components/providers/AuthModalProvider";
+import UserDropdown from "@/components/UserDropdown";
 
 type Position = { left: number; width: number; opacity: number };
 
@@ -185,6 +185,7 @@ function NavDropdown({
 const TABS = [
   { label: "DSA Sheets",            href: "/dsa-sheet"    },
   { label: "Snippets",              href: "/snippets"     },
+  { label: "Courses",               href: "/courses"      },
   { label: "Interview Experiences", href: "/experiences"  },
   { label: "Contests",              href: "/contests"     },
 ];

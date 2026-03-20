@@ -1,11 +1,10 @@
-// convex/admins.ts
+// Admin management — checking admin status, listing, adding and removing admins.
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAdmin } from "./_helper";
 import type { Id } from "./_generated/dataModel";
 
-// ─── Check if current user is admin (used by AdminGuard) ─────────────────────
-
+// Used by AdminGuard on the admin app to decide whether to render or redirect.
 export const isAdmin = query({
   handler: async ({ db, auth }) => {
     const identity = await auth.getUserIdentity();
@@ -18,8 +17,6 @@ export const isAdmin = query({
   },
 });
 
-// ─── Get all admins ───────────────────────────────────────────────────────────
-
 export const getAllAdmins = query({
   handler: async ({ db, auth }) => {
     await requireAdmin(db, auth);
@@ -29,13 +26,12 @@ export const getAllAdmins = query({
       userId:  r.userId,
       email:   r.email,
       name:    r.name,
-      addedAt: r.createdAt,   // alias so frontend uses consistent field name
+      addedAt: r.createdAt,
     }));
   },
 });
 
-// ─── Add admin by email ───────────────────────────────────────────────────────
-
+// Adds an admin by email. The user must already have a ScriptValley account.
 export const addAdminByEmail = mutation({
   args: { email: v.string() },
   handler: async ({ db, auth }, { email }) => {
@@ -43,18 +39,13 @@ export const addAdminByEmail = mutation({
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // User must already have a ScriptValley account
     const allUsers = await db.query("users").collect();
     const user = (allUsers as any[]).find(
       (u) => (u.email ?? "").toLowerCase() === normalizedEmail
     );
-    if (!user) {
-      throw new Error(
-        `No ScriptValley account found for "${email}". The user must sign up first.`
-      );
-    }
+    if (!user)
+      throw new Error(`No account found for "${email}". The user must sign up first.`);
 
-    // Guard: already an admin
     const existing = await db
       .query("admins")
       .withIndex("by_user_id", (q) => q.eq("userId", user.userId))
@@ -72,8 +63,7 @@ export const addAdminByEmail = mutation({
   },
 });
 
-// ─── Remove admin ─────────────────────────────────────────────────────────────
-
+// Admins cannot remove themselves — that guard is enforced here.
 export const removeAdmin = mutation({
   args: { adminId: v.id("admins") },
   handler: async ({ db, auth }, { adminId }: { adminId: Id<"admins"> }) => {
@@ -82,10 +72,8 @@ export const removeAdmin = mutation({
     const row = await db.get(adminId);
     if (!row) throw new Error("Admin record not found");
 
-    // Safety: cannot remove yourself
-    if ((row as any).userId === callerId) {
+    if ((row as any).userId === callerId)
       throw new Error("You cannot remove your own admin access");
-    }
 
     await db.delete(adminId);
     return { ok: true };

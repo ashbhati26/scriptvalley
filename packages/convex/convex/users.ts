@@ -1,40 +1,59 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+function sanitizeString(s: unknown): string {
+  if (typeof s !== "string") return "";
+  return s.trim();
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+function isValidPhone(phone: string) {
+  if (!phone) return true;
+  const cleaned = phone.replace(/[\s\-()]/g, "");
+  return /^[+0-9]{7,15}$/.test(cleaned);
+}
+
+function isReasonableName(name: string) {
+  const len = name.trim().length;
+  return len >= 2 && len <= 120;
+}
+
+// Called by the Clerk webhook on user.created and by UserSyncProvider on sign in.
 export const syncUser = mutation({
   args: {
     userId: v.string(),
-    email: v.optional(v.string()),
-    name: v.optional(v.string()),
-    role: v.optional(v.string()),
+    email:  v.optional(v.string()),
+    name:   v.optional(v.string()),
+    role:   v.optional(v.string()),
   },
   handler: async (ctx, { userId, email, name, role }) => {
-    const existingUser = await ctx.db
+    const existing = await ctx.db
       .query("users")
       .withIndex("by_user_id", (q) => q.eq("userId", userId))
       .unique();
 
     const now = new Date().toISOString();
 
-    if (!existingUser) {
+    if (!existing) {
       await ctx.db.insert("users", {
         userId,
-        email: email ?? "",
-        name: name ?? "",
-        role: typeof role === "undefined" ? "user" : role,
+        email:     email ?? "",
+        name:      name  ?? "",
+        role:      role  ?? "user",
         createdAt: now,
         updatedAt: now,
       });
     } else {
-      const patch: Record<string, any> = {};
-      if (email && email !== existingUser.email) patch.email = email;
-      if (name && name !== existingUser.name) patch.name = name;
-      if (typeof role !== "undefined" && role !== existingUser.role)
-        patch.role = role;
-
+      const patch: Record<string, string> = {};
+      if (email && email !== existing.email) patch.email = email;
+      if (name  && name  !== existing.name)  patch.name  = name;
+      if (role  && role  !== existing.role)  patch.role  = role;
       if (Object.keys(patch).length > 0) {
         patch.updatedAt = now;
-        await ctx.db.patch(existingUser._id, patch);
+        await ctx.db.patch(existing._id, patch);
       }
     }
 
@@ -42,35 +61,91 @@ export const syncUser = mutation({
   },
 });
 
+// Fetch a single user by their Clerk userId.
 export const getUser = query({
   args: { userId: v.string() },
   handler: async (ctx, { userId }) => {
-    if (!userId) return null;
-
+    const uid = sanitizeString(userId);
+    if (!uid) return null;
     return await ctx.db
       .query("users")
-      .withIndex("by_user_id", (q) => q.eq("userId", userId))
+      .withIndex("by_user_id", (q) => q.eq("userId", uid))
       .unique();
   },
 });
 
-// Search users by name or email
+// Update the editable fields on a user's profile (name, email, phone, college, location).
+export const updateBasicInfo = mutation({
+  args: {
+    userId:      v.string(),
+    name:        v.string(),
+    email:       v.string(),
+    phoneNumber: v.optional(v.string()),
+    collegeName: v.optional(v.string()),
+    state:       v.optional(v.string()),
+    country:     v.optional(v.string()),
+    idToken:     v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId      = sanitizeString(args.userId);
+    const name        = sanitizeString(args.name);
+    const email       = sanitizeString(args.email);
+    const phoneNumber = sanitizeString(args.phoneNumber ?? "");
+    const collegeName = sanitizeString(args.collegeName ?? "");
+    const state       = sanitizeString(args.state       ?? "");
+    const country     = sanitizeString(args.country     ?? "");
+
+    if (!userId)                   throw new Error("Missing userId");
+    if (!isReasonableName(name))   throw new Error("Invalid name");
+    if (!isValidEmail(email))      throw new Error("Invalid email");
+    if (!isValidPhone(phoneNumber)) throw new Error("Invalid phone number");
+
+    const now = new Date().toISOString();
+
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_user_id", (q) => q.eq("userId", userId))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        name,
+        email,
+        phoneNumber: phoneNumber || undefined,
+        collegeName: collegeName || undefined,
+        state:       state       || undefined,
+        country:     country     || undefined,
+        updatedAt:   now,
+      });
+      return await ctx.db.get(existing._id);
+    }
+
+    return await ctx.db.insert("users", {
+      userId,
+      name,
+      email,
+      phoneNumber: phoneNumber || undefined,
+      collegeName: collegeName || undefined,
+      state:       state       || undefined,
+      country:     country     || undefined,
+      createdAt:   now,
+      updatedAt:   now,
+    });
+  },
+});
+
+// Full-text search over name + email — used in the admin user search.
 export const searchUsers = query({
   args: { q: v.string() },
   handler: async (ctx, { q }) => {
     const lower = q.toLowerCase();
     const users = await ctx.db.query("users").collect();
-
     return users
       .filter(
         (u) =>
           u.name?.toLowerCase().includes(lower) ||
           u.email?.toLowerCase().includes(lower)
       )
-      .map((u) => ({
-        userId: u.userId,
-        name: u.name,
-        email: u.email,
-      }));
+      .map((u) => ({ userId: u.userId, name: u.name, email: u.email }));
   },
 });

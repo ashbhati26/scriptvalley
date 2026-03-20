@@ -9,9 +9,7 @@
  */
 
 import type * as _helper from "../_helper.js";
-import type * as adminSync from "../adminSync.js";
 import type * as admins from "../admins.js";
-import type * as basicInfo from "../basicInfo.js";
 import type * as codeExecutions from "../codeExecutions.js";
 import type * as courses from "../courses.js";
 import type * as experiences from "../experiences.js";
@@ -21,7 +19,6 @@ import type * as notes from "../notes.js";
 import type * as platforms from "../platforms.js";
 import type * as potd from "../potd.js";
 import type * as progress from "../progress.js";
-import type * as progressAdmin from "../progressAdmin.js";
 import type * as roles from "../roles.js";
 import type * as sheets from "../sheets.js";
 import type * as snippets from "../snippets.js";
@@ -37,9 +34,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   _helper: typeof _helper;
-  adminSync: typeof adminSync;
   admins: typeof admins;
-  basicInfo: typeof basicInfo;
   codeExecutions: typeof codeExecutions;
   courses: typeof courses;
   experiences: typeof experiences;
@@ -49,7 +44,6 @@ declare const fullApi: ApiFromModules<{
   platforms: typeof platforms;
   potd: typeof potd;
   progress: typeof progress;
-  progressAdmin: typeof progressAdmin;
   roles: typeof roles;
   sheets: typeof sheets;
   snippets: typeof snippets;

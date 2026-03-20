@@ -43,7 +43,7 @@ function ProgressBar({ solved, attempted, color = "#3A5EFF" }: { solved: number;
 }
 
 export default function UserReport({ userId, onBack }: { userId: string; onBack: () => void }) {
-  const report = useQuery(api.progressAdmin.getIndividualReport, { userId }) as UserReportData | undefined;
+  const report = useQuery(api.sheets.adminGetUserReport, { userId }) as UserReportData | undefined;
 
   const downloadCSV = () => {
     if (!report) return;

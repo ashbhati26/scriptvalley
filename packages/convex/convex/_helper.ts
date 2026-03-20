@@ -1,6 +1,4 @@
-// convex/_helper.ts
-
-// ─── Existing helpers (unchanged) ────────────────────────────────────────────
+// Shared utilities and auth guards used across all Convex functions.
 
 export function normalizePhone(phone: string | undefined | null): string | null {
   if (!phone) return null;
@@ -17,8 +15,7 @@ export function validatePhone(
   if (!/^[+0-9]{7,15}$/.test(normalized)) {
     return {
       ok: false,
-      error:
-        "phoneNumber must contain only digits and optional leading + and be 7-15 digits long.",
+      error: "Phone must contain only digits with an optional leading + and be 7–15 digits long.",
     };
   }
   return { ok: true };
@@ -40,15 +37,13 @@ export function validateSocialUrl(
   if (!url || url.trim() === "") return { ok: true };
   if (!isAbsoluteHttpUrl(url))
     return { ok: false, error: "URL must be an absolute http/https URL." };
+
   if (domainWhitelist && domainWhitelist.length > 0) {
     try {
       const host = new URL(url).host.toLowerCase();
       const matched = domainWhitelist.some((d) => host.includes(d));
       if (!matched)
-        return {
-          ok: false,
-          error: `URL must be from one of: ${domainWhitelist.join(", ")}`,
-        };
+        return { ok: false, error: `URL must be from one of: ${domainWhitelist.join(", ")}` };
     } catch {
       return { ok: false, error: "Invalid URL." };
     }
@@ -56,6 +51,7 @@ export function validateSocialUrl(
   return { ok: true };
 }
 
+// Converts a raw username or full URL into a canonical platform URL.
 export function normalizePlatformUrl(
   platform: string,
   value: string | undefined | null,
@@ -67,46 +63,28 @@ export function normalizePlatformUrl(
     try {
       const u = new URL(raw);
       const host = u.host.toLowerCase();
-      if (platform === "github") {
-        if (!host.includes("github.com"))
-          return { ok: false, error: "URL must be a github.com URL." };
-      } else if (platform === "leetcode") {
-        if (!host.includes("leetcode.com"))
-          return { ok: false, error: "URL must be a leetcode.com URL." };
-      } else {
+      if (platform === "github" && !host.includes("github.com"))
+        return { ok: false, error: "URL must be a github.com URL." };
+      if (platform === "leetcode" && !host.includes("leetcode.com"))
+        return { ok: false, error: "URL must be a leetcode.com URL." };
+      if (platform !== "github" && platform !== "leetcode")
         return { ok: false, error: "Unsupported platform." };
-      }
-      const normalized = u.href.replace(/\/+$/, "");
-      return { ok: true, url: normalized };
+      return { ok: true, url: u.href.replace(/\/+$/, "") };
     } catch {
       return { ok: false, error: "Invalid URL." };
     }
   }
 
   const username = raw.replace(/^@/, "").trim();
-  if (!/^[A-Za-z0-9_.\-]+$/.test(username)) {
-    return {
-      ok: false,
-      error: "Platform username contains invalid characters.",
-    };
-  }
+  if (!/^[A-Za-z0-9_.\-]+$/.test(username))
+    return { ok: false, error: "Platform username contains invalid characters." };
 
-  if (platform === "github") {
-    return { ok: true, url: `https://github.com/${username}` };
-  } else if (platform === "leetcode") {
-    return { ok: true, url: `https://leetcode.com/u/${username}` };
-  } else {
-    return { ok: false, error: "Unsupported platform." };
-  }
+  if (platform === "github") return { ok: true, url: `https://github.com/${username}` };
+  if (platform === "leetcode") return { ok: true, url: `https://leetcode.com/u/${username}` };
+  return { ok: false, error: "Unsupported platform." };
 }
 
-// ─── NEW: Role-based auth helpers ────────────────────────────────────────────
-
-/**
- * Require the caller to be an admin.
- * Throws if not authenticated or not in the admins table.
- * Returns the caller's userId.
- */
+// Throws if the caller is not in the admins table. Returns their userId.
 export async function requireAdmin(db: any, auth: any): Promise<string> {
   const identity = await auth.getUserIdentity();
   if (!identity) throw new Error("Unauthenticated");
@@ -120,11 +98,7 @@ export async function requireAdmin(db: any, auth: any): Promise<string> {
   return identity.subject;
 }
 
-/**
- * Require the caller to be an approved instructor.
- * Throws if not authenticated, not in the instructors table, or not approved.
- * Returns the caller's userId.
- */
+// Throws if the caller is not an approved instructor. Returns their userId.
 export async function requireInstructor(db: any, auth: any): Promise<string> {
   const identity = await auth.getUserIdentity();
   if (!identity) throw new Error("Unauthenticated");
@@ -139,10 +113,7 @@ export async function requireInstructor(db: any, auth: any): Promise<string> {
   return identity.subject;
 }
 
-/**
- * Require the caller to be either an admin OR an approved instructor.
- * Returns { userId, role: "admin" | "instructor" }
- */
+// Returns the caller's userId and role. Throws if neither admin nor approved instructor.
 export async function requireAdminOrInstructor(
   db: any,
   auth: any,
@@ -164,15 +135,12 @@ export async function requireAdminOrInstructor(
     .withIndex("by_user_id", (q: any) => q.eq("userId", userId))
     .unique();
 
-  if (instructorRow && instructorRow.isApproved)
-    return { userId, role: "instructor" };
+  if (instructorRow?.isApproved) return { userId, role: "instructor" };
 
   throw new Error("Forbidden: admins or approved instructors only");
 }
 
-/**
- * Shared slug generator used across content types.
- */
+// Turns any string into a URL-safe slug.
 export function makeSlug(input: string): string {
   return String(input)
     .trim()
@@ -182,11 +150,45 @@ export function makeSlug(input: string): string {
     .replace(/-+/g, "-");
 }
 
-/**
- * Content status type shared across sheets, articles, quizzes, certs.
- */
-export type ContentStatus =
-  | "draft"
-  | "pending_review"
-  | "published"
-  | "rejected";
+export type ContentStatus = "draft" | "pending_review" | "published" | "rejected";
+
+// Reusable helper to upsert sheet_progress for a user + sheet combo.
+// Used by both progress.ts and potd.ts to keep progress writes consistent.
+export async function upsertSheetProgress(
+  db: any,
+  userId: string,
+  sheetSlug: string,
+  relevant: { difficulty: string; attempted: boolean }[],
+) {
+  const solved = relevant.filter((a) => a.attempted);
+
+  const byDifficulty = { easy: 0, medium: 0, hard: 0 };
+  for (const a of solved) {
+    const d = String(a.difficulty || "medium").toLowerCase();
+    if (d.startsWith("easy"))      byDifficulty.easy++;
+    else if (d.startsWith("hard")) byDifficulty.hard++;
+    else                           byDifficulty.medium++;
+  }
+
+  const existing = await db
+    .query("sheet_progress")
+    .withIndex("by_user_sheet", (q: any) =>
+      q.eq("userId", userId).eq("sheetSlug", sheetSlug)
+    )
+    .unique()
+    .catch(() => null);
+
+  const now = Date.now();
+  const payload = {
+    totalAttempted: solved.length,
+    totalSolved:    solved.length,
+    byDifficulty,
+    updatedAt:      now,
+  };
+
+  if (existing) {
+    await db.patch(existing._id, payload);
+  } else {
+    await db.insert("sheet_progress", { userId, sheetSlug, ...payload });
+  }
+}

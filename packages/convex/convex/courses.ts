@@ -1,14 +1,10 @@
-// convex/courses.ts
+// Everything related to courses — CRUD, review workflow, lesson progress, and saved courses.
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAdmin, requireInstructor, makeSlug } from "./_helper";
 
-// ─── Sub-validators (mirror schema.ts) ────────────────────────────────────────
-
-const mcqOptionV = v.object({
-  text:      v.string(),
-  isCorrect: v.boolean(),
-});
+// Validators mirroring schema.ts — defined here so mutations can accept nested objects.
+const mcqOptionV = v.object({ text: v.string(), isCorrect: v.boolean() });
 
 const mcqQuestionV = v.object({
   question:    v.string(),
@@ -19,14 +15,10 @@ const mcqQuestionV = v.object({
 const codingChallengeV = v.object({
   title:       v.string(),
   description: v.string(),
-  difficulty:  v.optional(v.union(
-    v.literal("easy"),
-    v.literal("medium"),
-    v.literal("hard"),
-  )),
-  platform: v.optional(v.string()),
-  link:     v.optional(v.string()),
-  hint:     v.optional(v.string()),
+  difficulty:  v.optional(v.union(v.literal("easy"), v.literal("medium"), v.literal("hard"))),
+  platform:    v.optional(v.string()),
+  link:        v.optional(v.string()),
+  hint:        v.optional(v.string()),
 });
 
 const lessonV = v.object({
@@ -34,7 +26,7 @@ const lessonV = v.object({
   lessonNumber:  v.optional(v.string()),
   title:         v.string(),
   topicsCovered: v.optional(v.string()),
-  content:       v.optional(v.string()),   // TipTap HTML — full flowing article
+  content:       v.optional(v.string()),
 });
 
 const moduleV = v.object({
@@ -42,14 +34,19 @@ const moduleV = v.object({
   title:            v.string(),
   slug:             v.string(),
   description:      v.optional(v.string()),
-  content:          v.optional(v.string()), // freeform fallback
+  content:          v.optional(v.string()),
   lessons:          v.optional(v.array(lessonV)),
   mcqQuestions:     v.optional(v.array(mcqQuestionV)),
   codingChallenges: v.optional(v.array(codingChallengeV)),
   miniProject:      v.optional(codingChallengeV),
 });
 
-// ─── Public queries ────────────────────────────────────────────────────────────
+const levelV = v.optional(v.union(
+  v.literal("beginner"),
+  v.literal("intermediate"),
+  v.literal("advanced"),
+  v.literal("all-levels"),
+));
 
 export const getAllCourses = query({
   handler: async (ctx) => {
@@ -72,8 +69,6 @@ export const getCourseBySlug = query({
   },
 });
 
-// ─── Instructor queries ────────────────────────────────────────────────────────
-
 export const getMyCourses = query({
   handler: async (ctx) => {
     const userId = await requireInstructor(ctx.db, ctx.auth);
@@ -83,8 +78,6 @@ export const getMyCourses = query({
       .collect();
   },
 });
-
-// ─── Admin queries ─────────────────────────────────────────────────────────────
 
 export const getPendingCourses = query({
   handler: async (ctx) => {
@@ -103,21 +96,14 @@ export const adminGetAllCourses = query({
   },
 });
 
-// ─── Instructor mutations ──────────────────────────────────────────────────────
-
 export const createCourse = mutation({
   args: {
     title:       v.string(),
     slug:        v.optional(v.string()),
     description: v.optional(v.string()),
     template:    v.optional(v.union(v.literal("freeform"), v.literal("structured"))),
-    level:       v.optional(v.union(
-      v.literal("beginner"),
-      v.literal("intermediate"),
-      v.literal("advanced"),
-      v.literal("all-levels"),
-    )),
-    modules: v.array(moduleV),
+    level:       levelV,
+    modules:     v.array(moduleV),
   },
   handler: async (ctx, args) => {
     const userId = await requireInstructor(ctx.db, ctx.auth);
@@ -152,19 +138,14 @@ export const updateCourse = mutation({
     title:       v.optional(v.string()),
     description: v.optional(v.string()),
     template:    v.optional(v.union(v.literal("freeform"), v.literal("structured"))),
-    level:       v.optional(v.union(
-      v.literal("beginner"),
-      v.literal("intermediate"),
-      v.literal("advanced"),
-      v.literal("all-levels"),
-    )),
-    modules: v.optional(v.array(moduleV)),
+    level:       levelV,
+    modules:     v.optional(v.array(moduleV)),
   },
   handler: async (ctx, args) => {
     const userId = await requireInstructor(ctx.db, ctx.auth);
 
     const course = await ctx.db.get(args.id);
-    if (!course)                    throw new Error("Course not found");
+    if (!course)                     throw new Error("Course not found");
     if (course.createdBy !== userId) throw new Error("Forbidden: not your course");
 
     const patch: Record<string, any> = { updatedAt: Date.now() };
@@ -172,16 +153,11 @@ export const updateCourse = mutation({
     if (args.description !== undefined) patch.description = args.description?.trim();
     if (args.template    !== undefined) patch.template    = args.template;
     if (args.level       !== undefined) patch.level       = args.level;
-    if (args.modules     !== undefined) {
-      patch.modules = [...args.modules].sort((a, b) => a.order - b.order);
-    }
+    if (args.modules     !== undefined) patch.modules     = [...args.modules].sort((a, b) => a.order - b.order);
 
+    // Only pull back from pending if the course was waiting for review.
     // Published courses stay live while the instructor edits.
-    // They re-submit explicitly when ready for another admin review.
-    // Only pull back to draft if the course is currently in pending_review.
-    if (course.status === "pending_review") {
-      patch.status = "draft";
-    }
+    if (course.status === "pending_review") patch.status = "draft";
 
     await ctx.db.patch(args.id, patch);
     return { ok: true };
@@ -193,9 +169,9 @@ export const submitCourseForReview = mutation({
   handler: async (ctx, { id }) => {
     const userId = await requireInstructor(ctx.db, ctx.auth);
     const course = await ctx.db.get(id);
-    if (!course)                    throw new Error("Course not found");
+    if (!course)                     throw new Error("Course not found");
     if (course.createdBy !== userId) throw new Error("Forbidden");
-    if (course.status !== "draft" && course.status !== "rejected" && course.status !== "published")
+    if (!["draft", "rejected", "published"].includes(course.status))
       throw new Error("Only draft, rejected, or published courses can be submitted");
     if (course.modules.length === 0)
       throw new Error("Add at least one module before submitting");
@@ -221,7 +197,7 @@ export const withdrawCourseFromReview = mutation({
   handler: async (ctx, { id }) => {
     const userId = await requireInstructor(ctx.db, ctx.auth);
     const course = await ctx.db.get(id);
-    if (!course)                    throw new Error("Course not found");
+    if (!course)                     throw new Error("Course not found");
     if (course.createdBy !== userId) throw new Error("Forbidden");
     if (course.status !== "pending_review") throw new Error("Course is not under review");
     await ctx.db.patch(id, { status: "draft", updatedAt: Date.now() });
@@ -234,14 +210,12 @@ export const deleteMyCourse = mutation({
   handler: async (ctx, { id }) => {
     const userId = await requireInstructor(ctx.db, ctx.auth);
     const course = await ctx.db.get(id);
-    if (!course)                    throw new Error("Course not found");
+    if (!course)                     throw new Error("Course not found");
     if (course.createdBy !== userId) throw new Error("Forbidden");
     await ctx.db.delete(id);
     return { ok: true };
   },
 });
-
-// ─── Admin mutations ───────────────────────────────────────────────────────────
 
 export const publishCourse = mutation({
   args: { id: v.id("courses") },
@@ -278,10 +252,7 @@ export const adminDeleteCourse = mutation({
   },
 });
 
-// ─── Lesson Progress ───────────────────────────────────────────────────────────
-
 // Returns all completed lesson slugs for the current user in a given course.
-// Shape: [{ moduleSlug, lessonSlug, completedAt }]
 export const getLessonProgress = query({
   args: { courseSlug: v.string() },
   handler: async (ctx, { courseSlug }) => {
@@ -297,19 +268,14 @@ export const getLessonProgress = query({
   },
 });
 
-// Mark a lesson complete. Idempotent — safe to call multiple times.
+// Idempotent — safe to call multiple times for the same lesson.
 export const markLessonComplete = mutation({
-  args: {
-    courseSlug:  v.string(),
-    moduleSlug:  v.string(),
-    lessonSlug:  v.string(),
-  },
+  args: { courseSlug: v.string(), moduleSlug: v.string(), lessonSlug: v.string() },
   handler: async (ctx, { courseSlug, moduleSlug, lessonSlug }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not signed in");
     const userId = identity.subject;
 
-    // Check if already marked — avoid duplicate rows
     const existing = await ctx.db
       .query("lesson_progress")
       .withIndex("by_user_lesson", (q) =>
@@ -333,9 +299,6 @@ export const markLessonComplete = mutation({
   },
 });
 
-// ─── Saved Courses ────────────────────────────────────────────────────────────
-
-// Returns all saved course slugs for the current user.
 export const getSavedCourses = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -348,12 +311,8 @@ export const getSavedCourses = query({
   },
 });
 
-// Toggle save / unsave a course.
 export const saveOrUnsaveCourse = mutation({
-  args: {
-    courseSlug: v.string(),
-    save:       v.boolean(),
-  },
+  args: { courseSlug: v.string(), save: v.boolean() },
   handler: async (ctx, { courseSlug, save }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not signed in");
@@ -366,17 +325,13 @@ export const saveOrUnsaveCourse = mutation({
       )
       .unique();
 
-    if (save && !existing) {
-      await ctx.db.insert("saved_courses", { userId, courseSlug, savedAt: Date.now() });
-    } else if (!save && existing) {
-      await ctx.db.delete(existing._id);
-    }
+    if (save && !existing)  await ctx.db.insert("saved_courses", { userId, courseSlug, savedAt: Date.now() });
+    if (!save && existing)  await ctx.db.delete(existing._id);
     return { ok: true };
   },
 });
 
-// Returns a map of courseSlug → completedLessonCount for the current user.
-// Used by the courses list page to show progress on each CourseCard.
+// Returns a map of courseSlug → completedLessonCount — used on the course listing page.
 export const getAllLessonProgressCounts = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -391,5 +346,46 @@ export const getAllLessonProgressCounts = query({
       counts[row.courseSlug] = (counts[row.courseSlug] ?? 0) + 1;
     }
     return counts;
+  },
+});
+
+// Wipes all lesson progress for a course — used by the full course reset button.
+export const resetCourseProgress = mutation({
+  args: { courseSlug: v.string() },
+  handler: async (ctx, { courseSlug }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not signed in");
+    const userId = identity.subject;
+
+    const rows = await ctx.db
+      .query("lesson_progress")
+      .withIndex("by_user_course", (q) =>
+        q.eq("userId", userId).eq("courseSlug", courseSlug)
+      )
+      .collect();
+
+    await Promise.all(rows.map((r) => ctx.db.delete(r._id)));
+    return { ok: true, deleted: rows.length };
+  },
+});
+
+// Wipes progress for a single module — used by the per-module reset button in the sidebar.
+export const resetModuleProgress = mutation({
+  args: { courseSlug: v.string(), moduleSlug: v.string() },
+  handler: async (ctx, { courseSlug, moduleSlug }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not signed in");
+    const userId = identity.subject;
+
+    const rows = await ctx.db
+      .query("lesson_progress")
+      .withIndex("by_user_course", (q) =>
+        q.eq("userId", userId).eq("courseSlug", courseSlug)
+      )
+      .collect();
+
+    const toDelete = rows.filter((r) => r.moduleSlug === moduleSlug);
+    await Promise.all(toDelete.map((r) => ctx.db.delete(r._id)));
+    return { ok: true, deleted: toDelete.length };
   },
 });

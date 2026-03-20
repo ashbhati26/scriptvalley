@@ -1,7 +1,6 @@
+// Interview experience submissions — students submit, admins review and publish.
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
 
 function slugify(str: string) {
   return str
@@ -11,30 +10,27 @@ function slugify(str: string) {
     .replace(/-+/g, "-");
 }
 
-// ─── Submit (user) ────────────────────────────────────────────────────────────
+const roundV = v.object({
+  type:        v.string(),
+  description: v.string(),
+  duration:    v.optional(v.string()),
+  difficulty:  v.optional(v.string()),
+});
 
 export const submitExperience = mutation({
   args: {
-    name: v.string(),
-    linkedinUrl: v.string(),
-    company: v.string(),
-    role: v.string(),
-    location: v.optional(v.string()),
-    package: v.optional(v.string()),
-    outcome: v.string(),
+    name:          v.string(),
+    linkedinUrl:   v.string(),
+    company:       v.string(),
+    role:          v.string(),
+    location:      v.optional(v.string()),
+    package:       v.optional(v.string()),
+    outcome:       v.string(),
     interviewDate: v.string(),
-    rounds: v.array(
-      v.object({
-        type: v.string(),
-        description: v.string(),
-        duration: v.optional(v.string()),
-        difficulty: v.optional(v.string()),
-      })
-    ),
-    overview: v.string(),
-    tips: v.optional(v.string()),
+    rounds:        v.array(roundV),
+    overview:      v.string(),
+    tips:          v.optional(v.string()),
   },
-
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
@@ -42,18 +38,13 @@ export const submitExperience = mutation({
     const userId = identity.subject;
     const email  = identity.email ?? "";
 
-    const baseSlug = slugify(
-      `${args.company}-${args.role}-${args.name}-${args.interviewDate}`
-    );
-
-    let slug = baseSlug;
+    const baseSlug = slugify(`${args.company}-${args.role}-${args.name}-${args.interviewDate}`);
+    let slug    = baseSlug;
     let counter = 1;
 
+    // Make the slug unique by appending a counter if it already exists.
     while (
-      await ctx.db
-        .query("experiences")
-        .withIndex("by_slug", (q) => q.eq("slug", slug))
-        .unique()
+      await ctx.db.query("experiences").withIndex("by_slug", (q) => q.eq("slug", slug)).unique()
     ) {
       slug = `${baseSlug}-${counter++}`;
     }
@@ -81,29 +72,21 @@ export const submitExperience = mutation({
   },
 });
 
-// ─── Update (user — author only, resets to pending for re-review) ─────────────
-
+// Editing resets status to pending so the admin re-reviews the changes.
 export const updateExperience = mutation({
   args: {
-    id: v.id("experiences"),
-    name: v.string(),
-    linkedinUrl: v.string(),
-    company: v.string(),
-    role: v.string(),
-    location: v.optional(v.string()),
-    package: v.optional(v.string()),
-    outcome: v.string(),
+    id:            v.id("experiences"),
+    name:          v.string(),
+    linkedinUrl:   v.string(),
+    company:       v.string(),
+    role:          v.string(),
+    location:      v.optional(v.string()),
+    package:       v.optional(v.string()),
+    outcome:       v.string(),
     interviewDate: v.string(),
-    rounds: v.array(
-      v.object({
-        type: v.string(),
-        description: v.string(),
-        duration: v.optional(v.string()),
-        difficulty: v.optional(v.string()),
-      })
-    ),
-    overview: v.string(),
-    tips: v.optional(v.string()),
+    rounds:        v.array(roundV),
+    overview:      v.string(),
+    tips:          v.optional(v.string()),
   },
   handler: async (ctx, { id, ...fields }) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -113,18 +96,10 @@ export const updateExperience = mutation({
     if (!exp) throw new Error("Not found");
     if (exp.userId !== identity.subject) throw new Error("Unauthorized");
 
-    await ctx.db.patch(id, {
-      ...fields,
-      // Reset to pending so admin re-reviews the edits
-      status:      "pending",
-      publishedAt: undefined,
-    });
-
+    await ctx.db.patch(id, { ...fields, status: "pending", publishedAt: undefined });
     return { success: true };
   },
 });
-
-// ─── Delete (user — author only) ──────────────────────────────────────────────
 
 export const deleteExperience = mutation({
   args: { id: v.id("experiences") },
@@ -141,8 +116,7 @@ export const deleteExperience = mutation({
   },
 });
 
-// ─── Get published (public listing page) ─────────────────────────────────────
-
+// Public listing — strips email before returning.
 export const getPublishedExperiences = query({
   handler: async (ctx) => {
     const exps = await ctx.db
@@ -150,18 +124,14 @@ export const getPublishedExperiences = query({
       .withIndex("by_status_and_createdAt", (q) => q.eq("status", "published"))
       .order("desc")
       .collect();
-
     return exps.map(({ email, ...rest }) => rest);
   },
 });
-
-// ─── Get user's own experiences (any status) ─────────────────────────────────
 
 export const getUserExperiences = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
-
     return await ctx.db
       .query("experiences")
       .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
@@ -170,8 +140,6 @@ export const getUserExperiences = query({
   },
 });
 
-// ─── Get single by slug (public detail page) ─────────────────────────────────
-
 export const getExperienceBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }) => {
@@ -179,16 +147,13 @@ export const getExperienceBySlug = query({
       .query("experiences")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .unique();
-
     if (!exp || exp.status !== "published") return null;
-
     const { email, ...rest } = exp;
     return rest;
   },
 });
 
-// ─── Get single by slug for author (any status, for edit page) ───────────────
-
+// For the author's edit page — returns regardless of status.
 export const getExperienceBySlugForAuthor = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }) => {
@@ -200,71 +165,44 @@ export const getExperienceBySlugForAuthor = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .unique();
 
-    if (!exp) return null;
-    if (exp.userId !== identity.subject) return null;
-
+    if (!exp || exp.userId !== identity.subject) return null;
     return exp;
   },
 });
-
-// ─── Get all (admin panel) ────────────────────────────────────────────────────
 
 export const getAllExperiencesAdmin = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
-
-    return await ctx.db
-      .query("experiences")
-      .order("desc")
-      .collect();
+    return await ctx.db.query("experiences").order("desc").collect();
   },
 });
-
-// ─── Publish (admin) ──────────────────────────────────────────────────────────
 
 export const publishExperience = mutation({
   args: { id: v.id("experiences") },
   handler: async (ctx, { id }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
-
-    await ctx.db.patch(id, {
-      status:      "published",
-      publishedAt: Date.now(),
-    });
+    await ctx.db.patch(id, { status: "published", publishedAt: Date.now() });
   },
 });
-
-// ─── Reject (admin) ───────────────────────────────────────────────────────────
 
 export const rejectExperience = mutation({
   args: { id: v.id("experiences") },
   handler: async (ctx, { id }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
-
     await ctx.db.patch(id, { status: "rejected" });
   },
 });
-
-// ─── Delete (admin — any experience, any status) ──────────────────────────────
 
 export const adminDeleteExperience = mutation({
   args: { id: v.id("experiences") },
   handler: async (ctx, { id }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
-
-    // Optional: add an isAdmin check here if you have a users table
-    // const user = await ctx.db.query("users")
-    //   .withIndex("by_clerk_id", q => q.eq("clerkId", identity.subject))
-    //   .unique();
-    // if (!user?.isAdmin) throw new Error("Forbidden");
-
     const exp = await ctx.db.get(id);
     if (!exp) throw new Error("Not found");
-
     await ctx.db.delete(id);
     return { success: true };
   },

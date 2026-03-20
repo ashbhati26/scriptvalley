@@ -9,9 +9,9 @@ import {
   SquareChevronRight,
   FilePenLine,
   Star,
-  Calendar,
+  Presentation,
 } from "lucide-react";
-import HeaderProfileBtn from "./HeaderProfileBtn";
+import UserDropdown from "./UserDropdown";
 
 export function DockWrapper() {
   const { isSignedIn } = useUser();
@@ -30,24 +30,24 @@ export function DockWrapper() {
       href: "/dsa-sheet",
     },
     {
-      title: "Starred",
-      icon: <Star className="h-full w-full" />,
-      href: "/starred",
-    },
-    {
       title: "Notes",
       icon: <FilePenLine className="h-full w-full" />,
       href: "/notes",
     },
     {
+      title: "Starred",
+      icon: <Star className="h-full w-full" />,
+      href: "/starred",
+    },
+    {
+      title: "Courses",
+      icon: <Presentation className="h-full w-full" />,
+      href: "/courses",
+    },
+    {
       title: "Snippets",
       icon: <SquareLibrary className="h-full w-full" />,
       href: "/snippets",
-    },
-    {
-      title: "Contests",
-      icon: <Calendar className="h-full w-full" />,
-      href: "/contests",
     },
     {
       title: "Playground",
@@ -58,7 +58,7 @@ export function DockWrapper() {
       title: "Profile",
       icon: (
         <div className="h-4 w-4 flex items-center justify-center">
-          <HeaderProfileBtn />
+          <UserDropdown />
         </div>
       ),
       href: "",
