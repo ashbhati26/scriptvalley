@@ -80,17 +80,16 @@ export const getPendingSheets = query({
   },
 });
 
+// ─── Returns ALL sheets visible to instructors (not just the caller's own).
+// The UI shows a "created by" label so instructors know who owns each sheet.
 export const getMySheets = query({
   handler: async ({ db, auth }) => {
-    const userId = await requireInstructor(db, auth);
-    const rows = await db
-      .query("dsaSheets")
-      .withIndex("by_createdBy", (q: any) => q.eq("createdBy", userId))
-      .collect();
-    return rows.map(normalizeSheetRow);
+    await requireInstructor(db, auth);
+    return (await db.query("dsaSheets").collect()).map(normalizeSheetRow);
   },
 });
 
+// Admin-only hard delete. Instructors use deleteMySheet which enforces publish guard.
 export const remove = mutation({
   args: { id: v.id("dsaSheets") },
   handler: async ({ db, auth }, { id }: { id: Id<"dsaSheets"> }) => {
@@ -173,6 +172,9 @@ export const createDraftSheet = mutation({
   },
 });
 
+// ─── Any instructor can edit any sheet.
+// Published sheets stay published while being edited (no status reset on publish).
+// Only pending_review sheets get pulled back to draft on edit.
 export const updateDraftSheet = mutation({
   args: {
     id:               v.id("dsaSheets"),
@@ -186,16 +188,15 @@ export const updateDraftSheet = mutation({
     order:            v.optional(v.number()),
   },
   handler: async ({ db, auth }, args) => {
-    const userId = await requireInstructor(db, auth);
+    await requireInstructor(db, auth);
 
     const sheet = await db.get(args.id);
     if (!sheet) throw new Error("Sheet not found");
-    if (sheet.createdBy !== userId) throw new Error("Forbidden: not your sheet");
 
     const patch: Record<string, any> = {};
 
-    // If the sheet was already published or pending, editing resets it to draft for re-review.
-    if (sheet.status === "published" || sheet.status === "pending_review") {
+    // Only pull back from pending_review — published sheets stay live while edited.
+    if (sheet.status === "pending_review") {
       patch.status          = "draft";
       patch.rejectionReason = undefined;
     }
@@ -230,14 +231,14 @@ export const updateDraftSheet = mutation({
   },
 });
 
+// ─── Any instructor can submit any sheet for review.
 export const submitSheetForReview = mutation({
   args: { id: v.id("dsaSheets") },
   handler: async ({ db, auth }, { id }) => {
-    const userId = await requireInstructor(db, auth);
+    await requireInstructor(db, auth);
 
     const sheet = await db.get(id);
     if (!sheet) throw new Error("Sheet not found");
-    if (sheet.createdBy !== userId) throw new Error("Forbidden: not your sheet");
     if (sheet.status !== "draft" && sheet.status !== "rejected")
       throw new Error("Only draft or rejected sheets can be submitted for review");
 
@@ -250,14 +251,14 @@ export const submitSheetForReview = mutation({
   },
 });
 
+// ─── Any instructor can withdraw a sheet from review.
 export const withdrawSheetFromReview = mutation({
   args: { id: v.id("dsaSheets") },
   handler: async ({ db, auth }, { id }) => {
-    const userId = await requireInstructor(db, auth);
+    await requireInstructor(db, auth);
 
     const sheet = await db.get(id);
     if (!sheet) throw new Error("Sheet not found");
-    if (sheet.createdBy !== userId) throw new Error("Forbidden: not your sheet");
     if (sheet.status !== "pending_review") throw new Error("Sheet is not under review");
 
     await db.patch(id, { status: "draft", updatedAt: Date.now() });
@@ -265,13 +266,17 @@ export const withdrawSheetFromReview = mutation({
   },
 });
 
+// ─── Delete is blocked for published sheets.
+// Only drafts and rejected sheets can be deleted by any instructor.
+// Admins use the `remove` mutation above for force-deletes.
 export const deleteMySheet = mutation({
   args: { id: v.id("dsaSheets") },
   handler: async ({ db, auth }, { id }) => {
-    const userId = await requireInstructor(db, auth);
-    const sheet  = await db.get(id);
+    await requireInstructor(db, auth);
+    const sheet = await db.get(id);
     if (!sheet) throw new Error("Sheet not found");
-    if (sheet.createdBy !== userId) throw new Error("Forbidden: not your sheet");
+    if (sheet.status === "published")
+      throw new Error("Published sheets cannot be deleted. Ask an admin to unpublish it first.");
     await db.delete(id);
     return { ok: true };
   },
@@ -448,7 +453,6 @@ export const adminSearchUsers = query({
 });
 
 // Full progress report for a specific user — used on the admin user detail page.
-// Merged from progressAdmin.ts since it only had this one function.
 export const adminGetUserReport = query({
   args: { userId: v.string() },
   handler: async ({ db, auth }, { userId }) => {

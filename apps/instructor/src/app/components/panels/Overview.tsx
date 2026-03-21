@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { api } from "@convex/_generated/api";
 import { motion } from "framer-motion";
 import { BookOpen, Code2, Clock, XCircle, ArrowRight, Sparkles, Plus } from "lucide-react";
@@ -24,8 +24,8 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
-function StatCard({ label, total, pending, rejected, color, Icon, onClick }: {
-  label: string; total: number; pending: number; rejected: number;
+function StatCard({ label, total, mine, pending, rejected, color, Icon, onClick }: {
+  label: string; total: number; mine: number; pending: number; rejected: number;
   color: string; Icon: React.FC<{ className?: string }>; onClick: () => void;
 }) {
   return (
@@ -38,7 +38,11 @@ function StatCard({ label, total, pending, rejected, color, Icon, onClick }: {
         <ArrowRight className="w-3 h-3 text-(--text-disabled) group-hover:text-(--text-faint) transition-colors" />
       </div>
       <p className="text-2xl font-bold text-(--text-primary) tabular-nums">{total}</p>
-      <p className="text-[11px] text-(--text-faint) mt-0.5">{label}</p>
+      <p className="text-[11px] text-(--text-faint) mt-0.5">{label} total</p>
+      {/* My content vs total split */}
+      <p className="text-[10px] text-(--text-disabled) mt-0.5">
+        {mine} created by you
+      </p>
       {(pending > 0 || rejected > 0) && (
         <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t border-(--border-subtle)">
           {pending  > 0 && <span className="flex items-center gap-1 text-[9px] text-amber-500"><Clock   className="w-2.5 h-2.5" />{pending} pending</span>}
@@ -65,7 +69,9 @@ function QuickAction({ label, color, Icon, onClick }: {
 
 export default function Overview({ onNavigate }: { onNavigate: (m: Mode) => void }) {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const skip = !isLoaded || !isSignedIn;
+  const myUserId = user?.id;
 
   const profile = useQuery(api.instructors.getMyProfile,  skip ? "skip" : undefined) as any;
   const courses = useQuery(api.courses.getMyCourses, skip ? "skip" : undefined) as any[] | undefined;
@@ -73,9 +79,18 @@ export default function Overview({ onNavigate }: { onNavigate: (m: Mode) => void
 
   const isLoading = skip || courses === undefined || sheets === undefined;
 
+  const myCoursesItems = (courses ?? []).filter((c: any) => c.createdBy === myUserId);
+  const mySheetsItems  = (sheets  ?? []).filter((s: any) => s.createdBy === myUserId);
+
   const CARDS = [
-    { key: "courses" as Mode, label: "Courses",    Icon: BookOpen, color: "var(--brand)", items: courses ?? [] },
-    { key: "sheets"  as Mode, label: "DSA Sheets", Icon: Code2,    color: "#0891b2",      items: sheets  ?? [] },
+    {
+      key: "courses" as Mode, label: "Courses", Icon: BookOpen, color: "var(--brand)",
+      items: courses ?? [], mine: myCoursesItems,
+    },
+    {
+      key: "sheets" as Mode, label: "DSA Sheets", Icon: Code2, color: "#0891b2",
+      items: sheets ?? [], mine: mySheetsItems,
+    },
   ];
 
   const recentItems = [
@@ -144,6 +159,7 @@ export default function Overview({ onNavigate }: { onNavigate: (m: Mode) => void
               <StatCard key={c.key} label={c.label} total={c.items.length}
                 pending={c.items.filter((x: any)  => x.status === "pending_review").length}
                 rejected={c.items.filter((x: any) => x.status === "rejected").length}
+                mine={c.mine.length}
                 color={c.color} Icon={c.Icon} onClick={() => onNavigate(c.key)} />
             )
           )}

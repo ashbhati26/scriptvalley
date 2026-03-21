@@ -6,7 +6,7 @@ import { api } from "../../../../../packages/convex/convex/_generated/api";
 import type { Id } from "../../../../../packages/convex/convex/_generated/dataModel";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Trash2, Layers, Clock, ChevronDown, ChevronUp, AlertCircle, Tag } from "lucide-react";
+import { Award, Trash2, BookOpen, Clock, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 
 type FilterStatus = "all" | "draft" | "pending_review" | "published" | "rejected";
 
@@ -17,16 +17,11 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string; bo
   rejected:       { label: "Rejected",  color: "#dc2626",           bg: "rgba(220,38,38,0.08)",  border: "rgba(220,38,38,0.20)"  },
 };
 
-const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  popular:          { bg: "rgba(58,94,255,0.08)",  border: "rgba(58,94,255,0.2)",  text: "#3A5EFF"  },
-  "complete-dsa":   { bg: "rgba(99,102,241,0.08)", border: "rgba(99,102,241,0.2)", text: "#818cf8"  },
-  "quick-revision": { bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.2)",  text: "#4ade80"  },
-  "topic-specific": { bg: "rgba(14,165,233,0.08)", border: "rgba(14,165,233,0.2)", text: "#38bdf8"  },
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  popular: "Popular", "complete-dsa": "Complete DSA",
-  "quick-revision": "Quick Revision", "topic-specific": "Topic Specific",
+const LEVEL_COLORS: Record<string, string> = {
+  beginner:     "#22c55e",
+  intermediate: "#f59e0b",
+  advanced:     "#ef4444",
+  "all-levels": "#3A5EFF",
 };
 
 const FILTERS: { key: FilterStatus; label: string }[] = [
@@ -49,35 +44,20 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
-function CategoryBadge({ category }: { category?: string }) {
-  const key   = category ?? "";
-  const style = CATEGORY_COLORS[key] ?? { bg: "var(--bg-elevated)", border: "var(--border-subtle)", text: "var(--text-disabled)" };
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full border"
-      style={{ background: style.bg, borderColor: style.border, color: style.text }}
-    >
-      <Tag className="w-2.5 h-2.5" />
-      {(CATEGORY_LABELS[key] ?? key) || "—"}
-    </span>
-  );
-}
-
-function SheetRow({ sheet, idx, onDelete }: {
-  sheet: any;
+function CourseRow({ course, idx, onDelete }: {
+  course: any;
   idx: number;
-  onDelete: (id: Id<"dsaSheets">) => void;
+  onDelete: (id: Id<"courses">) => void;
 }) {
   const [expanded,   setExpanded]   = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
 
-  const topicCount = sheet.content?.topics?.length ?? sheet.topics?.length ?? 0;
-  const qCount     = (sheet.content?.topics ?? sheet.topics ?? [])
-    .reduce((n: number, t: any) => n + (t.questions?.length ?? 0), 0);
-  const status     = sheet.status ?? "published"; // legacy rows have no status
+  const moduleCount = course.modules?.length ?? 0;
+  const levelColor  = course.level ? LEVEL_COLORS[course.level] : undefined;
 
   return (
     <motion.div
+      key={String(course._id)}
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.99 }}
@@ -87,45 +67,50 @@ function SheetRow({ sheet, idx, onDelete }: {
       {/* Main row */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-3">
         <div className="flex-1 min-w-0">
-          {/* Name + badges */}
+          {/* Title + badges */}
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <p className="text-sm font-medium text-(--text-secondary) truncate">{sheet.name || "Untitled"}</p>
-            <StatusChip status={status} />
-            {sheet.category && <CategoryBadge category={sheet.category} />}
+            <p className="text-sm font-medium text-(--text-secondary) truncate">{course.title || "Untitled"}</p>
+            <StatusChip status={course.status} />
+            {course.level && (
+              <span
+                className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border capitalize"
+                style={{ color: levelColor, background: `${levelColor}18`, borderColor: `${levelColor}40` }}
+              >
+                {course.level}
+              </span>
+            )}
           </div>
 
           {/* Slug + meta */}
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-[10px] font-mono text-(--text-disabled) bg-(--bg-hover) rounded px-1.5 py-0.5">
-              {sheet.slug}
+              {course.slug}
             </span>
             <span className="flex items-center gap-1 text-[10px] text-(--text-disabled)">
-              <Layers className="w-3 h-3" />{topicCount} topic{topicCount !== 1 ? "s" : ""}
-            </span>
-            <span className="text-[10px] text-(--text-disabled)">
-              {qCount} question{qCount !== 1 ? "s" : ""}
+              <BookOpen className="w-3 h-3" />{moduleCount} module{moduleCount !== 1 ? "s" : ""}
             </span>
             <span className="flex items-center gap-1 text-[10px] text-(--text-disabled)">
               <Clock className="w-3 h-3" />
-              {new Date(sheet.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              {new Date(course.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </span>
           </div>
 
           {/* Description */}
-          {sheet.description && (
-            <p className="text-xs text-(--text-disabled) mt-1 line-clamp-1">{sheet.description}</p>
+          {course.description && (
+            <p className="text-xs text-(--text-disabled) mt-1 line-clamp-1">{course.description}</p>
           )}
 
           {/* Rejection reason */}
-          {status === "rejected" && sheet.rejectionReason && (
+          {course.status === "rejected" && course.rejectionReason && (
             <p className="flex items-center gap-1 text-xs text-red-400/80 mt-1">
-              <AlertCircle className="w-3 h-3 shrink-0" />{sheet.rejectionReason}
+              <AlertCircle className="w-3 h-3 shrink-0" />{course.rejectionReason}
             </p>
           )}
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Preview toggle */}
           <button
             onClick={() => setExpanded(!expanded)}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-(--text-faint) hover:text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
@@ -134,10 +119,11 @@ function SheetRow({ sheet, idx, onDelete }: {
             Preview
           </button>
 
+          {/* Delete */}
           {confirmDel ? (
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => { onDelete(sheet._id); setConfirmDel(false); }}
+                onClick={() => { onDelete(course._id); setConfirmDel(false); }}
                 className="px-2.5 py-1 rounded text-xs bg-red-500 text-white font-semibold"
               >
                 Delete
@@ -170,11 +156,7 @@ function SheetRow({ sheet, idx, onDelete }: {
             className="mt-3 overflow-hidden"
           >
             <pre className="text-[11px] text-(--text-faint) font-mono bg-(--bg-input) rounded-md p-3 overflow-x-auto max-h-48 leading-relaxed whitespace-pre-wrap break-words">
-              {JSON.stringify(
-                { ...sheet, content: `{topics: [${topicCount} topics, ${qCount} questions total]}` },
-                null,
-                2
-              )}
+              {JSON.stringify({ ...course, modules: `[${course.modules?.length ?? 0} modules — expand in inspector]` }, null, 2)}
             </pre>
           </motion.div>
         )}
@@ -183,30 +165,26 @@ function SheetRow({ sheet, idx, onDelete }: {
   );
 }
 
-export default function DSASheetsList() {
-  const sheets    = useQuery(api.sheets.adminGetAll) as any[] | undefined;
-  const deleteSheet = useMutation(api.sheets.remove);
+export default function CoursesList() {
+  const courses     = useQuery(api.courses.adminGetAllCourses) as any[] | undefined;
+  const deleteCourse = useMutation(api.courses.adminDeleteCourse);
   const [filter, setFilter] = useState<FilterStatus>("all");
 
-  async function handleDelete(id: Id<"dsaSheets">) {
+  async function handleDelete(id: Id<"courses">) {
     try {
-      await deleteSheet({ id });
-      toast.success("Sheet deleted");
+      await deleteCourse({ id });
+      toast.success("Course deleted");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Delete failed");
     }
   }
 
-  const shown = !sheets ? [] :
-    filter === "all"
-      ? sheets
-      : sheets.filter((s) => (s.status ?? "published") === filter);
+  const shown = !courses ? [] :
+    filter === "all" ? courses : courses.filter((c) => c.status === filter);
 
   const countFor = (f: FilterStatus) => {
-    if (!sheets) return 0;
-    return f === "all"
-      ? sheets.length
-      : sheets.filter((s) => (s.status ?? "published") === f).length;
+    if (!courses) return 0;
+    return f === "all" ? courses.length : courses.filter((c) => c.status === f).length;
   };
 
   return (
@@ -214,9 +192,9 @@ export default function DSASheetsList() {
       {/* Header */}
       <div>
         <p className="text-[10px] uppercase tracking-widest text-(--text-disabled) mb-1">Admin</p>
-        <h2 className="text-2xl font-semibold text-(--text-primary) mb-1">DSA Sheets</h2>
+        <h2 className="text-2xl font-semibold text-(--text-primary) mb-1">Courses</h2>
         <p className="text-sm text-(--text-faint)">
-          {sheets === undefined ? "Loading…" : `${sheets.length} sheet${sheets.length !== 1 ? "s" : ""} across all instructors`}
+          {courses === undefined ? "Loading…" : `${courses.length} course${courses.length !== 1 ? "s" : ""} across all instructors`}
         </p>
       </div>
 
@@ -233,7 +211,7 @@ export default function DSASheetsList() {
             }`}
           >
             {label}
-            {sheets !== undefined && (
+            {courses !== undefined && (
               <span className={`ml-1 tabular-nums text-[10px] ${filter === key ? "text-(--text-muted)" : "text-(--text-disabled)"}`}>
                 {countFor(key)}
               </span>
@@ -243,24 +221,24 @@ export default function DSASheetsList() {
       </div>
 
       {/* List */}
-      {sheets === undefined ? (
+      {courses === undefined ? (
         <div className="flex justify-center py-16">
           <div className="w-4 h-4 border-2 border-[#3A5EFF]/30 border-t-[#3A5EFF] rounded-full animate-spin" />
         </div>
       ) : shown.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-16 text-(--text-disabled)">
-          <BookOpen className="w-7 h-7" />
+          <Award className="w-7 h-7" />
           <p className="text-sm">
-            {filter === "all" ? "No sheets yet" : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()} sheets`}
+            {filter === "all" ? "No courses yet" : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()} courses`}
           </p>
         </div>
       ) : (
         <div className="rounded-lg border border-(--border-subtle) overflow-hidden">
           <AnimatePresence initial={false}>
-            {shown.map((sheet, idx) => (
-              <SheetRow
-                key={String(sheet._id)}
-                sheet={sheet}
+            {shown.map((course, idx) => (
+              <CourseRow
+                key={String(course._id)}
+                course={course}
                 idx={idx}
                 onDelete={handleDelete}
               />
@@ -271,7 +249,7 @@ export default function DSASheetsList() {
 
       {shown.length > 0 && (
         <p className="text-xs text-(--text-disabled) pt-2 border-t border-(--border-subtle)">
-          {shown.length} sheet{shown.length !== 1 ? "s" : ""}
+          {shown.length} course{shown.length !== 1 ? "s" : ""}
         </p>
       )}
     </div>

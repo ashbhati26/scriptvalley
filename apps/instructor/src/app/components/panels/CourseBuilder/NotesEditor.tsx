@@ -21,14 +21,17 @@ import {
   Bold, Italic, UnderlineIcon, Strikethrough,
   Code, Link2, RemoveFormatting, Highlighter,
 } from "lucide-react";
-import EditorSlashMenu   from "./EditorSlashMenu";
-import EditorToolbar     from "./EditorToolbar";
-import ImageUploadModal  from "./ImageUploadModal";    // ← new
+import EditorSlashMenu  from "./EditorSlashMenu";
+import EditorToolbar    from "./EditorToolbar";
+import ImageUploadModal from "./ImageUploadModal";
+
 
 interface NotesEditorProps {
   content:  string;
   onChange: (html: string) => void;
 }
+
+// ─── Inline bubble menu ───────────────────────────────────────────────────────
 
 function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -37,25 +40,19 @@ function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) 
   useEffect(() => {
     if (!editor) return;
     const update = () => {
-      const { from, to, empty } = editor.state.selection;
+      const { from, empty } = editor.state.selection;
       if (empty) { setPos(null); return; }
       const start  = editor.view.coordsAtPos(from);
-      const end    = editor.view.coordsAtPos(to);
+      const end    = editor.view.coordsAtPos(editor.state.selection.to);
       const parent = editor.view.dom.closest(".relative") as HTMLElement | null;
       if (!parent) return;
       const rect = parent.getBoundingClientRect();
       const midX = (start.left + end.left) / 2;
-      setPos({
-        top:  start.top - rect.top  - 46,
-        left: midX      - rect.left - 130,
-      });
+      setPos({ top: start.top - rect.top - 46, left: midX - rect.left - 130 });
     };
     editor.on("selectionUpdate", update);
     editor.on("transaction",     update);
-    return () => {
-      editor.off("selectionUpdate", update);
-      editor.off("transaction",     update);
-    };
+    return () => { editor.off("selectionUpdate", update); editor.off("transaction", update); };
   }, [editor]);
 
   if (!editor || !pos) return null;
@@ -77,65 +74,46 @@ function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) 
       onMouseDown={(e) => e.preventDefault()}
     >
       {items.map(({ icon: Icon, fn, active, title }) => (
-        <button
-          key={title}
-          type="button"
-          title={title}
-          onMouseDown={(e) => { e.preventDefault(); fn(); }}
-          className={`p-1.5 rounded-md transition-all ${
-            active
-              ? "bg-[#3A5EFF]/15 text-[#3A5EFF]"
-              : "text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover)"
-          }`}
-        >
+        <button key={title} type="button" title={title} onMouseDown={(e) => { e.preventDefault(); fn(); }}
+          className={`p-1.5 rounded-md transition-all ${active ? "bg-[#3A5EFF]/15 text-[#3A5EFF]" : "text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover)"}`}>
           <Icon className="w-3.5 h-3.5" />
         </button>
       ))}
       <div className="w-px h-4 bg-(--border-subtle) mx-0.5" />
-      <button
-        type="button"
-        title="Link"
+      <button type="button" title="Link"
         onMouseDown={(e) => {
           e.preventDefault();
           if (editor.isActive("link")) { editor.chain().focus().unsetLink().run(); return; }
           const url = window.prompt("URL:");
           if (url) editor.chain().focus().setLink({ href: url }).run();
         }}
-        className={`p-1.5 rounded-md transition-all ${
-          editor.isActive("link")
-            ? "bg-[#3A5EFF]/15 text-[#3A5EFF]"
-            : "text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover)"
-        }`}
+        className={`p-1.5 rounded-md transition-all ${editor.isActive("link") ? "bg-[#3A5EFF]/15 text-[#3A5EFF]" : "text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover)"}`}
       >
         <Link2 className="w-3.5 h-3.5" />
       </button>
       <div className="w-px h-4 bg-(--border-subtle) mx-0.5" />
-      <button
-        type="button"
-        title="Clear formatting"
+      <button type="button" title="Clear formatting"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().unsetAllMarks().clearNodes().run(); }}
-        className="p-1.5 rounded-md text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover) transition-all"
-      >
+        className="p-1.5 rounded-md text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover) transition-all">
         <RemoveFormatting className="w-3.5 h-3.5" />
       </button>
     </div>
   );
 }
 
-export default function NotesEditor({ content, onChange }: NotesEditorProps) {
-  const [slashOpen,       setSlashOpen]       = useState(false);
-  const [slashQuery,      setSlashQuery]      = useState("");
-  const [slashPos,        setSlashPos]        = useState({ top: 0, left: 0 });
-  // ─── Image upload modal state ─────────────────────────────────────────────
-  const [imageModalOpen,  setImageModalOpen]  = useState(false);
-  const [pendingSlashDel, setPendingSlashDel] = useState<{ from: number; len: number } | null>(null);
+// ─── Main editor ──────────────────────────────────────────────────────────────
 
+export default function NotesEditor({ content, onChange }: NotesEditorProps) {
+  const [slashOpen,      setSlashOpen]      = useState(false);
+  const [slashQuery,     setSlashQuery]     = useState("");
+  const [slashPos,       setSlashPos]       = useState({ top: 0, left: 0 });
+  const [imageModalOpen, setImageModalOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ codeBlock: false }),
+      StarterKit,
       Underline,
       Link.configure({
         openOnClick: false,
@@ -147,10 +125,7 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
       Color,
       TextStyle,
       Placeholder.configure({
-        placeholder: ({ node }) => {
-          if (node.type.name === "heading") return "Heading";
-          return "Type '/' for commands, or start writing…";
-        },
+        placeholder: ({ node }) => node.type.name === "heading" ? "Heading" : "Type '/' for commands, or start writing…",
         emptyEditorClass: "is-editor-empty",
         emptyNodeClass:   "is-empty",
       }),
@@ -162,9 +137,7 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
       TableCell,
     ],
     content: content || "",
-    onUpdate({ editor }) {
-      onChange(editor.getHTML());
-    },
+    onUpdate({ editor }) { onChange(editor.getHTML()); },
     editorProps: {
       attributes: {
         class: [
@@ -184,37 +157,27 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
           "[&_li[data-type=taskItem][data-checked=true]>div]:line-through [&_li[data-type=taskItem][data-checked=true]>div]:text-(--text-disabled)",
           "[&_blockquote]:border-l-[3px] [&_blockquote]:border-[#3A5EFF]/50 [&_blockquote]:pl-4 [&_blockquote]:my-4 [&_blockquote]:text-(--text-muted) [&_blockquote]:italic",
           "[&_code]:bg-(--bg-input) [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[#3A5EFF] [&_code]:text-xs [&_code]:font-mono",
-          "[&_pre]:bg-(--bg-elevated) [&_pre]:border [&_pre]:border-(--border-subtle) [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:my-4 [&_pre]:overflow-x-auto",
-          "[&_pre_code]:bg-transparent [&_pre_code]:text-(--text-faint) [&_pre_code]:p-0 [&_pre_code]:text-xs",
+          // Code block — dark surface, clean monospace
+          "[&_pre]:bg-[#0f1117] [&_pre]:border [&_pre]:border-white/[0.07] [&_pre]:rounded-xl [&_pre]:p-5 [&_pre]:my-5 [&_pre]:overflow-x-auto",
+          "[&_pre_code]:bg-transparent [&_pre_code]:text-[#e2e8f0] [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:leading-6 [&_pre_code]:font-mono",
           "[&_a]:text-[#3A5EFF] [&_a]:no-underline [&_a]:hover:underline",
-          "[&_img]:rounded-lg [&_img]:max-w-full [&_img]:my-4 [&_img]:border [&_img]:border-(--border-subtle)",
+          "[&_img]:rounded-xl [&_img]:max-w-full [&_img]:my-4 [&_img]:border [&_img]:border-(--border-subtle)",
           "[&_table]:border-collapse [&_table]:w-full [&_table]:my-4",
           "[&_td]:border [&_td]:border-(--border-subtle) [&_td]:px-3 [&_td]:py-2 [&_td]:text-sm [&_td]:text-(--text-secondary) [&_td]:align-top",
           "[&_th]:border [&_th]:border-(--border-subtle) [&_th]:px-3 [&_th]:py-2 [&_th]:bg-(--bg-input) [&_th]:text-xs [&_th]:font-semibold [&_th]:text-(--text-muted)",
           "[&_hr]:border-(--border-subtle) [&_hr]:my-6",
-          "[&_.is-editor-empty:first-child::before]:text-(--text-disabled)",
-          "[&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
-          "[&_.is-editor-empty:first-child::before]:float-left",
-          "[&_.is-editor-empty:first-child::before]:pointer-events-none",
-          "[&_.is-editor-empty:first-child::before]:h-0",
-          "[&_.is-empty::before]:text-(--text-disabled)",
-          "[&_.is-empty::before]:content-[attr(data-placeholder)]",
-          "[&_.is-empty::before]:float-left",
-          "[&_.is-empty::before]:pointer-events-none",
-          "[&_.is-empty::before]:h-0",
+          "[&_.is-editor-empty:first-child::before]:text-(--text-disabled) [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:h-0",
+          "[&_.is-empty::before]:text-(--text-disabled) [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0",
         ].join(" "),
       },
       handleKeyDown(view, event) {
         if (event.key === "/") {
           setTimeout(() => {
-            const { from }   = view.state.selection;
+            const { from } = view.state.selection;
             const coords     = view.coordsAtPos(from);
             const editorRect = editorRef.current?.getBoundingClientRect();
             if (!editorRect) return;
-            setSlashPos({
-              top:  coords.bottom - editorRect.top  + 4,
-              left: coords.left   - editorRect.left,
-            });
+            setSlashPos({ top: coords.bottom - editorRect.top + 4, left: coords.left - editorRect.left });
             setSlashQuery("");
             setSlashOpen(true);
           }, 0);
@@ -230,9 +193,9 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
     const handler = () => {
       const { $from } = editor.state.selection;
       const text = $from.nodeBefore?.text ?? "";
-      const slashIdx = text.lastIndexOf("/");
-      if (slashIdx === -1) { setSlashOpen(false); return; }
-      setSlashQuery(text.slice(slashIdx + 1));
+      const idx  = text.lastIndexOf("/");
+      if (idx === -1) { setSlashOpen(false); return; }
+      setSlashQuery(text.slice(idx + 1));
     };
     editor.on("update", handler);
     return () => { editor.off("update", handler); };
@@ -247,22 +210,10 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
 
   if (!editor) return null;
 
-  /* ── Slash-command execution ─────────────────────────────────────────────── */
-
   const execSlashCommand = (cmd: string) => {
     const { from } = editor.state.selection;
-    const deleteLen = slashQuery.length + 1;
-    editor.chain().focus().deleteRange({ from: from - deleteLen, to: from }).run();
-
-    if (cmd === "image") {
-      // Record cursor position so we can clean up the slash text before the modal.
-      // (Already deleted above — just open the modal.)
-      setPendingSlashDel(null);
-      setSlashOpen(false);
-      setImageModalOpen(true);
-      return;
-    }
-
+    editor.chain().focus().deleteRange({ from: from - slashQuery.length - 1, to: from }).run();
+    if (cmd === "image") { setSlashOpen(false); setImageModalOpen(true); return; }
     switch (cmd) {
       case "h1":      editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
       case "h2":      editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
@@ -278,17 +229,10 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
     setSlashOpen(false);
   };
 
-  /* ── Image insert callback (from modal) ─────────────────────────────────── */
-
-  function handleImageInsert(url: string) {
-    setImageModalOpen(false);
-    editor?.chain().focus().setImage({ src: url }).run();
-  }
-
   return (
     <>
       <div className="flex flex-col rounded-none overflow-visible">
-        <EditorToolbar editor={editor} />
+        <EditorToolbar editor={editor} onOpenImageModal={() => setImageModalOpen(true)} />
         <div className="relative" ref={editorRef}>
           <EditorContent editor={editor} />
           <InlineBubbleMenu editor={editor} />
@@ -303,10 +247,9 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
         </div>
       </div>
 
-      {/* Image upload modal — rendered outside the editor div to avoid z-index issues */}
       {imageModalOpen && (
         <ImageUploadModal
-          onInsert={handleImageInsert}
+          onInsert={(url) => { setImageModalOpen(false); editor?.chain().focus().setImage({ src: url }).run(); }}
           onClose={() => setImageModalOpen(false)}
         />
       )}

@@ -16,9 +16,15 @@ export default function InstructorNavbar() {
   const sheets  = useQuery(api.sheets.getMySheets,       skip ? "skip" : undefined);
   const profile = useQuery(api.instructors.getMyProfile, skip ? "skip" : undefined);
 
-  const pendingCount =
+  const pendingCount  =
     ((courses as any[])?.filter((c) => c.status === "pending_review").length ?? 0) +
     ((sheets  as any[])?.filter((s) => s.status === "pending_review").length ?? 0);
+
+  const rejectedCount =
+    ((courses as any[])?.filter((c) => c.status === "rejected").length ?? 0) +
+    ((sheets  as any[])?.filter((s) => s.status === "rejected").length ?? 0);
+
+  const alertCount = pendingCount + rejectedCount;
 
   const [dark, setDark] = useState(false);
 
@@ -64,16 +70,22 @@ export default function InstructorNavbar() {
 
         {/* Right */}
         <div className="flex items-center gap-1.5">
-          {pendingCount > 0 && (
+          {alertCount > 0 && (
             <motion.button
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              title={`${pendingCount} items under admin review`}
+              title={[
+                pendingCount  > 0 ? `${pendingCount} item${pendingCount  !== 1 ? "s" : ""} under review`  : "",
+                rejectedCount > 0 ? `${rejectedCount} item${rejectedCount !== 1 ? "s" : ""} rejected`       : "",
+              ].filter(Boolean).join(" · ")}
               className="relative w-7 h-7 flex items-center justify-center rounded-md text-(--text-faint) hover:text-(--text-muted) hover:bg-(--bg-hover) transition-colors"
             >
               <Bell className="w-3.5 h-3.5" />
-              <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-(--brand) flex items-center justify-center text-[8px] font-bold text-white leading-none">
-                {pendingCount > 9 ? "9+" : pendingCount}
+              <span
+                className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white leading-none"
+                style={{ background: rejectedCount > 0 ? "#dc2626" : "var(--brand)" }}
+              >
+                {alertCount > 9 ? "9+" : alertCount}
               </span>
             </motion.button>
           )}

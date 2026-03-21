@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useQuery } from "convex/react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { api } from "@convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, BookOpen, AlertCircle, ChevronRight } from "lucide-react";
+import { Plus, BookOpen, AlertCircle, ChevronRight, User } from "lucide-react";
 
 import { FilterKey, CourseForm } from "./courseTypes";
 import { StatusChip }            from "./CourseShared";
@@ -21,6 +21,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 
 export default function CourseBuilder() {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const skip  = !isLoaded || !isSignedIn;
   const certs = useQuery(api.courses.getMyCourses, skip ? "skip" : undefined) as any[] | undefined;
 
@@ -36,6 +37,7 @@ export default function CourseBuilder() {
     );
   }
 
+  const myUserId = user?.id;
   const shown    = filter === "all" ? (certs ?? []) : (certs ?? []).filter((c: any) => c.status === filter);
   const countFor = (f: FilterKey) => {
     if (!certs) return 0;
@@ -52,7 +54,7 @@ export default function CourseBuilder() {
           <div>
             <h2 className="text-2xl font-semibold text-(--text-primary) mb-1">Courses</h2>
             <p className="text-sm text-(--text-faint)">
-              Create courses with modules. Write rich content in each module.
+              All instructor courses — create new ones or edit existing content.
             </p>
           </div>
           <button
@@ -117,44 +119,66 @@ export default function CourseBuilder() {
       ) : (
         <AnimatePresence mode="popLayout">
           <div className="space-y-2">
-            {shown.map((c: any, i: number) => (
-              <motion.div
-                key={String(c._id)}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15, delay: i * 0.03 }}
-                onClick={() => setEditing(c as CourseForm)}
-                className="group flex items-center gap-4 px-4 py-4 rounded-xl border border-(--border-subtle) bg-(--bg-elevated) hover:border-(--border-medium) hover:bg-(--bg-hover) cursor-pointer transition-all"
-              >
-                <div className="w-9 h-9 rounded-lg bg-(--brand-subtle) border border-(--brand-border) flex items-center justify-center shrink-0">
-                  <BookOpen className="w-4 h-4 text-(--brand)" />
-                </div>
+            {shown.map((c: any, i: number) => {
+              const isOwn      = c.createdBy === myUserId;
+              const isPublished = c.status === "published";
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <StatusChip status={c.status} />
-                    <span className="text-[9px] text-(--text-disabled)">
-                      {c.modules?.length ?? 0} module{(c.modules?.length ?? 0) !== 1 ? "s" : ""}
-                    </span>
+              return (
+                <motion.div
+                  key={String(c._id)}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15, delay: i * 0.03 }}
+                  onClick={() => setEditing(c as CourseForm)}
+                  className="group flex items-center gap-4 px-4 py-4 rounded-xl border border-(--border-subtle) bg-(--bg-elevated) hover:border-(--border-medium) hover:bg-(--bg-hover) cursor-pointer transition-all"
+                >
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                    isOwn
+                      ? "bg-(--brand-subtle) border border-(--brand-border)"
+                      : "bg-(--bg-active) border border-(--border-subtle)"
+                  }`}>
+                    <BookOpen className={`w-4 h-4 ${isOwn ? "text-(--brand)" : "text-(--text-muted)"}`} />
                   </div>
-                  <p className="text-sm font-semibold text-(--text-secondary) group-hover:text-(--text-primary) transition-colors truncate">
-                    {c.title}
-                  </p>
-                  {c.description && (
-                    <p className="text-xs text-(--text-faint) mt-0.5 truncate">{c.description}</p>
-                  )}
-                  {c.status === "rejected" && c.rejectionReason && (
-                    <p className="text-xs text-red-500/80 mt-0.5 flex items-center gap-1 truncate">
-                      <AlertCircle className="w-3 h-3 shrink-0" />
-                      {c.rejectionReason}
-                    </p>
-                  )}
-                </div>
 
-                <ChevronRight className="w-4 h-4 text-(--text-disabled) shrink-0" />
-              </motion.div>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                      <StatusChip status={c.status} />
+                      <span className="text-[9px] text-(--text-disabled)">
+                        {c.modules?.length ?? 0} module{(c.modules?.length ?? 0) !== 1 ? "s" : ""}
+                      </span>
+                      {/* Show creator badge for courses by other instructors */}
+                      {!isOwn && (
+                        <span className="flex items-center gap-0.5 text-[9px] text-(--text-disabled) bg-(--bg-hover) border border-(--border-subtle) px-1.5 py-0.5 rounded-full">
+                          <User className="w-2.5 h-2.5" />
+                          Not yours
+                        </span>
+                      )}
+                      {/* Lock badge for published courses */}
+                      {isPublished && (
+                        <span className="text-[9px] text-(--brand) bg-(--brand-subtle) border border-(--brand-border) px-1.5 py-0.5 rounded-full font-medium">
+                          Live
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-(--text-secondary) group-hover:text-(--text-primary) transition-colors truncate">
+                      {c.title}
+                    </p>
+                    {c.description && (
+                      <p className="text-xs text-(--text-faint) mt-0.5 truncate">{c.description}</p>
+                    )}
+                    {c.status === "rejected" && c.rejectionReason && (
+                      <p className="text-xs text-red-500/80 mt-0.5 flex items-center gap-1 truncate">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {c.rejectionReason}
+                      </p>
+                    )}
+                  </div>
+
+                  <ChevronRight className="w-4 h-4 text-(--text-disabled) shrink-0" />
+                </motion.div>
+              );
+            })}
           </div>
         </AnimatePresence>
       )}
@@ -162,6 +186,11 @@ export default function CourseBuilder() {
       {shown.length > 0 && (
         <p className="text-xs text-(--text-disabled) pt-2 border-t border-(--border-subtle)">
           {shown.length} course{shown.length !== 1 ? "s" : ""}
+          {certs && myUserId && (
+            <span className="ml-2">
+              · {certs.filter((c: any) => c.createdBy === myUserId).length} created by you
+            </span>
+          )}
         </p>
       )}
     </div>

@@ -5,7 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import toast from "react-hot-toast";
 import {
-  ArrowLeft, Save, Send, RotateCcw, Trash2,
+  ArrowLeft, Save, Send, RotateCcw, Download,
   Eye, AlertCircle, Hash, AlignLeft, Plus,
   LayoutList, FileText, ChevronDown, FileJson,
 } from "lucide-react";
@@ -43,7 +43,6 @@ export default function CourseEditor({ course, onBack }: Props) {
     isNew ? [] : hydrateModules(course?.modules ?? [])
   );
   const [saving,      setSaving]      = useState(false);
-  const [confirmDel,  setConfirmDel]  = useState(false);
   const [editingMod,  setEditingMod]  = useState<Module | null>(null);
   const [showImport,  setShowImport]  = useState(false);
   const [showPreview, setShowPreview] = useState(false); // ← preview state
@@ -52,7 +51,6 @@ export default function CourseEditor({ course, onBack }: Props) {
   const updateMut   = useMutation(api.courses.updateCourse);
   const submitMut   = useMutation(api.courses.submitCourseForReview);
   const withdrawMut = useMutation(api.courses.withdrawCourseFromReview);
-  const deleteMut   = useMutation(api.courses.deleteMyCourse);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -106,9 +104,29 @@ export default function CourseEditor({ course, onBack }: Props) {
     try { await withdrawMut({ id: (course as any)._id }); toast.success("Withdrawn"); onBack(); }
     catch (e: any) { toast.error(e?.message); }
   }
-  async function onDelete() {
-    try { await deleteMut({ id: (course as any)._id }); toast.success("Deleted"); onBack(); }
-    catch (e: any) { toast.error(e?.message); }
+
+  function handleExport() {
+    if (!title.trim() && modules.length === 0) {
+      toast.error("Nothing to export — add a title and at least one module.");
+      return;
+    }
+    const data = {
+      title:       title.trim() || "Untitled Course",
+      description: description.trim() || undefined,
+      template,
+      level:       level || undefined,
+      modules:     stripKeys(modules),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `${makeSlug(title) || "course"}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("Exported as JSON");
   }
 
   const isPending   = course?.status === "pending_review";
@@ -203,24 +221,16 @@ export default function CourseEditor({ course, onBack }: Props) {
               </button>
             )}
 
-            {/* Delete */}
-            {course && (confirmDel ? (
-              <div className="flex items-center gap-1.5">
-                <button onClick={onDelete} className="px-2.5 py-1 rounded text-xs bg-red-500 text-white font-semibold">
-                  Delete
-                </button>
-                <button onClick={() => setConfirmDel(false)} className="px-2.5 py-1 rounded text-xs border border-(--border-subtle) text-(--text-muted)">
-                  Cancel
-                </button>
-              </div>
-            ) : (
+            {/* Export JSON */}
+            {(title || modules.length > 0) && (
               <button
-                onClick={() => setConfirmDel(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-(--text-faint) hover:text-red-400 hover:bg-red-500/[0.06] transition-colors"
+                onClick={handleExport}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-(--text-faint) hover:text-(--text-secondary) hover:bg-(--bg-hover) border border-(--border-subtle) transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Export</span>
               </button>
-            ))}
+            )}
 
             {/* Submit / Withdraw */}
             {isPending ? (

@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../../packages/convex/convex/_generated/api";
 import type { Id } from "../../../../../packages/convex/convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Award, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LayoutList } from "lucide-react";
+import { BookOpen, Award, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LayoutList, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useState } from "react";
 
@@ -46,15 +46,17 @@ export default function ContentReview() {
   );
 }
 
-function ReviewRow({ item, onPublish, onReject, meta }: {
+function ReviewRow({ item, onPublish, onReject, onDelete, meta }: {
   item: { _id: any; title?: string; name?: string; slug: string; createdAt: number; description?: string; summary?: string; [key: string]: any };
   onPublish: () => void;
   onReject: (reason: string) => void;
+  onDelete: () => void;
   meta?: React.ReactNode;
 }) {
-  const [expanded, setExpanded]   = useState(false);
-  const [rejecting, setRejecting] = useState(false);
-  const [reason, setReason]       = useState("");
+  const [expanded,   setExpanded]   = useState(false);
+  const [rejecting,  setRejecting]  = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [reason,     setReason]     = useState("");
   const displayName = item.title ?? item.name ?? "Untitled";
 
   return (
@@ -88,6 +90,23 @@ function ReviewRow({ item, onPublish, onReject, meta }: {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-text-faint hover:text-red-400/70 hover:bg-red-500/6 border border-transparent hover:border-red-500/20 text-xs transition-colors">
             <XCircle className="w-3.5 h-3.5" /> Reject
           </button>
+          {confirmDel ? (
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => { onDelete(); setConfirmDel(false); }}
+                className="px-2.5 py-1 rounded text-xs bg-red-500 text-white font-semibold">
+                Delete
+              </button>
+              <button onClick={() => setConfirmDel(false)}
+                className="px-2.5 py-1 rounded text-xs border border-(--border-subtle) text-(--text-muted)">
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDel(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-text-faint hover:text-red-400/70 hover:bg-red-500/6 text-xs transition-colors">
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -154,6 +173,7 @@ function SheetsReview() {
   const sheets  = useQuery(api.sheets.getPendingSheets);
   const publish = useMutation(api.sheets.publishSheet);
   const reject  = useMutation(api.sheets.rejectSheet);
+  const del     = useMutation(api.sheets.remove);
   if (sheets === undefined) return <Loader />;
   if (sheets.length === 0)  return <Empty label="DSA sheets" />;
   return (
@@ -162,6 +182,7 @@ function SheetsReview() {
         <ReviewRow key={String(s._id)} item={{ ...s, title: s.name }}
           onPublish={async () => { try { await publish({ id: s._id as Id<"dsaSheets"> }); toast.success(`"${s.name}" published`); } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); } }}
           onReject={async (reason) => { try { await reject({ id: s._id as Id<"dsaSheets">, reason }); toast.success(`"${s.name}" rejected`); } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); } }}
+          onDelete={async () => { try { await del({ id: s._id as Id<"dsaSheets"> }); toast.success(`"${s.name}" deleted`); } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); } }}
           meta={s.category ? <span className="text-[10px] text-text-disabled bg-bg-hover rounded px-1.5 py-0.5">{s.category}</span> : null}
         />
       ))}
@@ -173,6 +194,7 @@ function CoursesReview() {
   const courses = useQuery(api.courses.getPendingCourses);
   const publish = useMutation(api.courses.publishCourse);
   const reject  = useMutation(api.courses.rejectCourse);
+  const del     = useMutation(api.courses.adminDeleteCourse);
   if (courses === undefined) return <Loader />;
   if (courses.length === 0)  return <Empty label="courses" />;
   return (
@@ -181,6 +203,7 @@ function CoursesReview() {
         <ReviewRow key={String(c._id)} item={c}
           onPublish={async () => { try { await publish({ id: c._id as Id<"courses"> }); toast.success(`"${c.title}" published`); } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); } }}
           onReject={async (reason) => { try { await reject({ id: c._id as Id<"courses">, reason }); toast.success(`"${c.title}" rejected`); } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); } }}
+          onDelete={async () => { try { await del({ id: c._id as Id<"courses"> }); toast.success(`"${c.title}" deleted`); } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); } }}
           meta={<span className="text-[10px] text-text-disabled">{c.modules?.length ?? 0} modules</span>}
         />
       ))}

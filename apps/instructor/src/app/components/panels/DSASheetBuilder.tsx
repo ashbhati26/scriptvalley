@@ -284,7 +284,6 @@ function SheetEditor({ sheet, onBack }: { sheet: any | null; onBack: () => void 
     }))
   );
   const [saving,     setSaving]     = useState(false);
-  const [confirmDel, setConfirmDel] = useState(false);
 
   function setName(v: string) { setNameRaw(v); }
 
@@ -342,7 +341,6 @@ function SheetEditor({ sheet, onBack }: { sheet: any | null; onBack: () => void 
   const updateMut   = useMutation(api.sheets.updateDraftSheet);
   const submitMut   = useMutation(api.sheets.submitSheetForReview);
   const withdrawMut = useMutation(api.sheets.withdrawSheetFromReview);
-  const deleteMut   = useMutation(api.sheets.deleteMySheet);
 
   async function handleSave() {
     if (!name.trim()) { toast.error("Sheet name is required"); return; }
@@ -373,7 +371,6 @@ function SheetEditor({ sheet, onBack }: { sheet: any | null; onBack: () => void 
 
   async function handleSubmit()  { try { await submitMut({ id: sheet._id });   toast.success("Submitted"); onBack(); } catch (e: any) { toast.error(e?.message); } }
   async function handleWithdraw(){ try { await withdrawMut({ id: sheet._id }); toast.success("Withdrawn"); onBack(); } catch (e: any) { toast.error(e?.message); } }
-  async function handleDelete()  { try { await deleteMut({ id: sheet._id });   toast.success("Deleted");   onBack(); } catch (e: any) { toast.error(e?.message); } }
 
   const isPending   = sheet?.status === "pending_review";
   const isPublished = sheet?.status === "published";
@@ -402,7 +399,7 @@ function SheetEditor({ sheet, onBack }: { sheet: any | null; onBack: () => void 
             <p className="text-sm text-(--text-faint)">Configure metadata, topics and questions</p>
           </div>
 
-          {/* Toolbar — Import / Export / Reset / Delete */}
+          {/* Toolbar — Import / Export / Reset */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
             {[
               { label: "Import", Icon: FileJson,  fn: () => fileRef.current?.click() },
@@ -414,19 +411,7 @@ function SheetEditor({ sheet, onBack }: { sheet: any | null; onBack: () => void 
                 <Icon className="w-3.5 h-3.5" />{label}
               </button>
             ))}
-            {sheet && (
-              confirmDel ? (
-                <div className="flex items-center gap-1.5">
-                  <button onClick={handleDelete} className="px-2.5 py-1 rounded text-xs bg-red-500 text-white font-semibold">Delete</button>
-                  <button onClick={() => setConfirmDel(false)} className="px-2.5 py-1 rounded text-xs border border-(--border-subtle) text-(--text-muted)">Cancel</button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => setConfirmDel(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-(--text-faint) hover:text-red-400 hover:bg-red-500/[0.06] transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />Delete
-                </button>
-              )
-            )}
+
           </div>
         </div>
       </div>

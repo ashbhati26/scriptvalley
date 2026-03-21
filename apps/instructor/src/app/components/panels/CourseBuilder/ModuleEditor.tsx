@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Save, ChevronRight, Upload, FileText,
   X, AlertCircle, Plus, BookOpen, HelpCircle, Code2,
-  Rocket, Hash, GripVertical, Trash2,
+  Rocket, Hash, GripVertical, Trash2, Cloud, CloudOff,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -45,22 +45,60 @@ async function parseDocx(file: File): Promise<string> {
 type Tab = "lessons" | "mcq" | "challenges" | "project";
 
 const TABS: { key: Tab; label: string; Icon: any }[] = [
-  { key: "lessons",    label: "Lessons",     Icon: BookOpen   },
-  { key: "mcq",        label: "MCQs",        Icon: HelpCircle },
-  { key: "challenges", label: "Challenges",  Icon: Code2      },
-  { key: "project",    label: "Mini Project", Icon: Rocket    },
+  { key: "lessons",    label: "Lessons",      Icon: BookOpen   },
+  { key: "mcq",        label: "MCQs",         Icon: HelpCircle },
+  { key: "challenges", label: "Challenges",   Icon: Code2      },
+  { key: "project",    label: "Mini Project", Icon: Rocket     },
 ];
 
-export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBack, onSave }: Props) {
-  const [title,   setTitle]   = useState(mod.title);
-  const [desc,    setDesc]    = useState(mod.description ?? "");
-  const [content, setContent] = useState(mod.content    ?? "");
+// localStorage draft key scoped to module _key
+function draftKey(key: string) { return `sv-module-draft-${key}`; }
 
-  const [lessons,          setLessons]          = useState<Lesson[]>(mod.lessons          ?? []);
-  const [mcqQuestions,     setMcqQuestions]     = useState<MCQQuestion[]>(mod.mcqQuestions ?? []);
-  const [codingChallenges, setCodingChallenges] = useState<CodingChallenge[]>(mod.codingChallenges ?? []);
+function saveDraft(modKey: string, data: any) {
+  try { localStorage.setItem(draftKey(modKey), JSON.stringify(data)); } catch {}
+}
+
+function loadDraft(modKey: string, mod: Module, template: CourseTemplate) {
+  try {
+    const raw = localStorage.getItem(draftKey(modKey));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Compare against persisted values to see if the draft is actually different
+    const isDiff =
+      parsed.title   !== (mod.title       ?? "") ||
+      parsed.desc    !== (mod.description  ?? "") ||
+      parsed.content !== (mod.content      ?? "") ||
+      JSON.stringify(parsed.lessons)          !== JSON.stringify(mod.lessons          ?? []) ||
+      JSON.stringify(parsed.mcqQuestions)     !== JSON.stringify(mod.mcqQuestions     ?? []) ||
+      JSON.stringify(parsed.codingChallenges) !== JSON.stringify(mod.codingChallenges ?? []) ||
+      JSON.stringify(parsed.miniProject)      !== JSON.stringify(mod.miniProject);
+    return isDiff ? parsed : null;
+  } catch { return null; }
+}
+
+function clearDraft(modKey: string) {
+  try { localStorage.removeItem(draftKey(modKey)); } catch {}
+}
+
+export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBack, onSave }: Props) {
+  // Try to restore a draft
+  const draft = loadDraft(mod._key, mod, template);
+
+  const [title,   setTitle]   = useState(draft?.title   ?? mod.title);
+  const [desc,    setDesc]    = useState(draft?.desc     ?? mod.description ?? "");
+  const [content, setContent] = useState(draft?.content ?? mod.content     ?? "");
+
+  const [lessons,          setLessons]          = useState<Lesson[]>(
+    draft?.lessons ?? (mod.lessons ?? []).map((l: any) => ({ ...l, _key: l._key ?? crypto.randomUUID() }))
+  );
+  const [mcqQuestions,     setMcqQuestions]     = useState<MCQQuestion[]>(
+    draft?.mcqQuestions ?? mod.mcqQuestions ?? []
+  );
+  const [codingChallenges, setCodingChallenges] = useState<CodingChallenge[]>(
+    draft?.codingChallenges ?? mod.codingChallenges ?? []
+  );
   const [miniProject,      setMiniProject]      = useState<CodingChallenge | undefined>(
-    mod.miniProject ? { ...mod.miniProject } : undefined
+    draft?.miniProject ?? (mod.miniProject ? { ...mod.miniProject } : undefined)
   );
 
   const [activeTab,     setActiveTab]     = useState<Tab>("lessons");
@@ -69,11 +107,60 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
   const [showImport,    setShowImport]    = useState(false);
   const [pasteText,     setPasteText]     = useState("");
   const [importLoading, setImportLoading] = useState(false);
+  const [hasDraft,      setHasDraft]      = useState(!!draft);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const drag = useDragSort(lessons, setLessons);
 
-  function save() {
+  // Track saved reference for dirty detection
+  const savedRef = useRef({
+    title:            mod.title       ?? "",
+    desc:             mod.description ?? "",
+    content:          mod.content     ?? "",
+    lessons:          JSON.stringify(mod.lessons          ?? []),
+    mcqQuestions:     JSON.stringify(mod.mcqQuestions     ?? []),
+    codingChallenges: JSON.stringify(mod.codingChallenges ?? []),
+    miniProject:      JSON.stringify(mod.miniProject),
+  });
+
+  const isDirty =
+    title                                 !== savedRef.current.title           ||
+    desc                                  !== savedRef.current.desc            ||
+    content                               !== savedRef.current.content         ||
+    JSON.stringify(lessons)          !== savedRef.current.lessons          ||
+    JSON.stringify(mcqQuestions)     !== savedRef.current.mcqQuestions     ||
+    JSON.stringify(codingChallenges) !== savedRef.current.codingChallenges ||
+    JSON.stringify(miniProject)      !== savedRef.current.miniProject;
+
+  // ── Auto-save draft to localStorage (debounced 3s) ────────────────────────
+  useEffect(() => {
+    if (!canEdit) return;
+    const id = setTimeout(() => {
+      saveDraft(mod._key, { title, desc, content, lessons, mcqQuestions, codingChallenges, miniProject });
+    }, 3_000);
+    return () => clearTimeout(id);
+  }, [canEdit, title, desc, content, lessons, mcqQuestions, codingChallenges, miniProject, mod._key]);
+
+  // ── beforeunload warning ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  // ── Ctrl+S / Cmd+S ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!canEdit) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEdit, title, desc, content, lessons, mcqQuestions, codingChallenges, miniProject]);
+
+  const save = useCallback(() => {
     setSaving(true);
     onSave({
       ...mod,
@@ -86,8 +173,39 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
       codingChallenges: template === "structured" ? codingChallenges : [],
       miniProject:      template === "structured" ? miniProject      : undefined,
     });
+    savedRef.current = {
+      title, desc, content,
+      lessons:          JSON.stringify(lessons),
+      mcqQuestions:     JSON.stringify(mcqQuestions),
+      codingChallenges: JSON.stringify(codingChallenges),
+      miniProject:      JSON.stringify(miniProject),
+    };
+    clearDraft(mod._key);
+    setHasDraft(false);
     setTimeout(() => setSaving(false), 300);
     toast.success("Module saved");
+  }, [mod, template, title, desc, content, lessons, mcqQuestions, codingChallenges, miniProject, onSave]);
+
+  function discardDraft() {
+    clearDraft(mod._key);
+    setTitle(mod.title ?? "");
+    setDesc(mod.description ?? "");
+    setContent(mod.content ?? "");
+    setLessons(mod.lessons ?? []);
+    setMcqQuestions(mod.mcqQuestions ?? []);
+    setCodingChallenges(mod.codingChallenges ?? []);
+    setMiniProject(mod.miniProject ? { ...mod.miniProject } : undefined);
+    setHasDraft(false);
+    toast("Draft discarded");
+  }
+
+  function handleBack() {
+    if (isDirty) {
+      const ok = window.confirm("You have unsaved changes. Leave anyway?\n\nYour work is auto-saved locally — click Cancel to save first.");
+      if (!ok) return;
+    }
+    clearDraft(mod._key);
+    onBack();
   }
 
   function addLesson() {
@@ -121,7 +239,6 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
     setContent(textToHtml(pasteText)); setPasteText(""); setShowImport(false); toast.success("Imported");
   }
 
-  // Open lesson editor
   if (editingLesson) {
     return (
       <LessonEditor
@@ -149,7 +266,7 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
       {/* Topbar */}
       <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 md:px-6 h-12 border-b border-(--border-subtle) bg-(--bg-base)/95 backdrop-blur-sm">
         <div className="flex items-center gap-2 min-w-0 text-xs text-(--text-disabled)">
-          <button onClick={onBack} className="flex items-center gap-1 hover:text-(--text-muted) transition-colors shrink-0">
+          <button onClick={handleBack} className="flex items-center gap-1 hover:text-(--text-muted) transition-colors shrink-0">
             <ArrowLeft className="w-3.5 h-3.5" />
             <span className="hidden sm:inline truncate max-w-[120px]">{courseTitle || "Course"}</span>
           </button>
@@ -157,7 +274,15 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
           <span className="text-(--text-secondary) font-medium truncate">{title || "Untitled module"}</span>
         </div>
         {canEdit && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
+            {/* Dirty indicator */}
+            <span className="hidden sm:flex items-center gap-1 text-[10px] text-(--text-disabled)">
+              {isDirty
+                ? <><CloudOff className="w-3 h-3" />Unsaved</>
+                : <><Cloud className="w-3 h-3" />Saved</>
+              }
+            </span>
+
             {template === "freeform" && (
               <button
                 onClick={() => { setShowImport(!showImport); setPasteText(""); }}
@@ -179,6 +304,19 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
           </div>
         )}
       </div>
+
+      {/* Draft restore banner */}
+      {canEdit && hasDraft && (
+        <div className="flex items-center justify-between gap-3 px-5 md:px-8 py-2.5 bg-amber-500/[0.06] border-b border-amber-500/15">
+          <p className="text-xs text-amber-600">
+            <span className="font-semibold">Unsaved draft restored</span> — auto-saved content from your last session.
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={discardDraft} className="text-[10px] text-amber-600/70 hover:text-amber-600 underline">Discard</button>
+            <button onClick={save} className="text-[10px] px-2 py-1 rounded-md bg-amber-500 hover:bg-amber-600 text-white font-semibold">Save now</button>
+          </div>
+        </div>
+      )}
 
       {/* Import panel */}
       {template === "freeform" && canEdit && showImport && (
@@ -242,7 +380,7 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
         ) : desc ? <p className="text-sm text-(--text-faint)">{desc}</p> : null}
       </div>
 
-      {/* ── FREEFORM ─────────────────────────────────────────────────────── */}
+      {/* ── FREEFORM ────────────────────────────────────────────────────────── */}
       {template === "freeform" && (
         <div className="flex-1 max-w-3xl w-full pb-12">
           {canEdit ? (
@@ -255,9 +393,10 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
               [&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5
               [&_blockquote]:border-l-[3px] [&_blockquote]:border-[#3A5EFF]/50 [&_blockquote]:pl-4 [&_blockquote]:my-4 [&_blockquote]:italic [&_blockquote]:text-(--text-muted)
               [&_code]:bg-(--bg-input) [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[#3A5EFF] [&_code]:text-xs [&_code]:font-mono
-              [&_pre]:bg-(--bg-elevated) [&_pre]:border [&_pre]:border-(--border-subtle) [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:my-4 [&_pre]:overflow-x-auto
+              [&_pre]:bg-[#0f1117] [&_pre]:border [&_pre]:border-white/[0.07] [&_pre]:rounded-xl [&_pre]:p-5 [&_pre]:my-5 [&_pre]:overflow-x-auto
+              [&_pre_code]:bg-transparent [&_pre_code]:text-[#e2e8f0] [&_pre_code]:text-[13px] [&_pre_code]:leading-6
               [&_a]:text-[#3A5EFF] [&_a]:hover:underline
-              [&_img]:rounded-lg [&_img]:max-w-full [&_img]:my-4
+              [&_img]:rounded-xl [&_img]:max-w-full [&_img]:my-4 [&_img]:border [&_img]:border-(--border-subtle)
               [&_table]:border-collapse [&_table]:w-full [&_table]:my-4
               [&_td]:border [&_td]:border-(--border-subtle) [&_td]:px-3 [&_td]:py-2
               [&_th]:border [&_th]:border-(--border-subtle) [&_th]:px-3 [&_th]:py-2 [&_th]:bg-(--bg-input) [&_th]:font-semibold
@@ -266,7 +405,8 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
             />
           )}
           {canEdit && (
-            <div className="flex justify-end px-5 md:px-8 mt-2">
+            <div className="flex items-center justify-between px-5 md:px-8 mt-2">
+              <p className="text-[10px] text-(--text-disabled)">{isDirty ? "● Unsaved changes" : "✓ All changes saved"}</p>
               <button onClick={save} disabled={saving}
                 className="flex items-center gap-2 px-5 py-2 rounded-lg bg-(--brand) hover:bg-(--brand-hover) text-white text-sm font-semibold disabled:opacity-50 transition-colors"
               >
@@ -278,7 +418,7 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
         </div>
       )}
 
-      {/* ── STRUCTURED ───────────────────────────────────────────────────── */}
+      {/* ── STRUCTURED ──────────────────────────────────────────────────────── */}
       {template === "structured" && (
         <div className="flex-1 flex flex-col max-w-3xl w-full pb-12">
 
@@ -308,7 +448,7 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
 
           <div className="flex-1 px-5 md:px-8 py-6">
 
-            {/* ── Lessons tab ─────────────────────────────────────────── */}
+            {/* Lessons tab */}
             {activeTab === "lessons" && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -383,12 +523,10 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
               </div>
             )}
 
-            {/* ── MCQ tab ─────────────────────────────────────────────── */}
             {activeTab === "mcq" && (
               <MCQEditor questions={mcqQuestions} canEdit={canEdit} onChange={setMcqQuestions} />
             )}
 
-            {/* ── Challenges tab ──────────────────────────────────────── */}
             {activeTab === "challenges" && (
               <ChallengeEditor
                 challenges={codingChallenges} canEdit={canEdit} onChange={setCodingChallenges}
@@ -397,7 +535,6 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
               />
             )}
 
-            {/* ── Mini Project tab ────────────────────────────────────── */}
             {activeTab === "project" && (
               <div className="space-y-4">
                 <div>
@@ -428,7 +565,8 @@ export default function ModuleEditor({ mod, template, courseTitle, canEdit, onBa
           </div>
 
           {canEdit && (
-            <div className="flex justify-end px-5 md:px-8 mt-2">
+            <div className="flex items-center justify-between px-5 md:px-8 mt-2">
+              <p className="text-[10px] text-(--text-disabled)">{isDirty ? "● Unsaved changes" : "✓ All changes saved"}</p>
               <button onClick={save} disabled={saving}
                 className="flex items-center gap-2 px-5 py-2 rounded-lg bg-(--brand) hover:bg-(--brand-hover) text-white text-sm font-semibold disabled:opacity-50 transition-colors"
               >

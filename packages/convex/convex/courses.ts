@@ -69,13 +69,12 @@ export const getCourseBySlug = query({
   },
 });
 
+// ─── Returns ALL courses visible to instructors (not just the caller's own).
+// The UI shows a "created by" label so instructors know who owns each course.
 export const getMyCourses = query({
   handler: async (ctx) => {
-    const userId = await requireInstructor(ctx.db, ctx.auth);
-    return await ctx.db
-      .query("courses")
-      .withIndex("by_createdBy", (q) => q.eq("createdBy", userId))
-      .collect();
+    await requireInstructor(ctx.db, ctx.auth);
+    return await ctx.db.query("courses").collect();
   },
 });
 
@@ -132,6 +131,9 @@ export const createCourse = mutation({
   },
 });
 
+// ─── Any instructor can edit any course.
+// Published courses remain live while being edited (status not reset).
+// Only pending_review courses get pulled back to draft on edit.
 export const updateCourse = mutation({
   args: {
     id:          v.id("courses"),
@@ -142,11 +144,10 @@ export const updateCourse = mutation({
     modules:     v.optional(v.array(moduleV)),
   },
   handler: async (ctx, args) => {
-    const userId = await requireInstructor(ctx.db, ctx.auth);
+    await requireInstructor(ctx.db, ctx.auth);
 
     const course = await ctx.db.get(args.id);
-    if (!course)                     throw new Error("Course not found");
-    if (course.createdBy !== userId) throw new Error("Forbidden: not your course");
+    if (!course) throw new Error("Course not found");
 
     const patch: Record<string, any> = { updatedAt: Date.now() };
     if (args.title       !== undefined) patch.title       = args.title.trim();
@@ -155,8 +156,7 @@ export const updateCourse = mutation({
     if (args.level       !== undefined) patch.level       = args.level;
     if (args.modules     !== undefined) patch.modules     = [...args.modules].sort((a, b) => a.order - b.order);
 
-    // Only pull back from pending if the course was waiting for review.
-    // Published courses stay live while the instructor edits.
+    // Only pull back from pending_review — published courses stay live while being edited.
     if (course.status === "pending_review") patch.status = "draft";
 
     await ctx.db.patch(args.id, patch);
@@ -167,10 +167,9 @@ export const updateCourse = mutation({
 export const submitCourseForReview = mutation({
   args: { id: v.id("courses") },
   handler: async (ctx, { id }) => {
-    const userId = await requireInstructor(ctx.db, ctx.auth);
+    await requireInstructor(ctx.db, ctx.auth);
     const course = await ctx.db.get(id);
-    if (!course)                     throw new Error("Course not found");
-    if (course.createdBy !== userId) throw new Error("Forbidden");
+    if (!course) throw new Error("Course not found");
     if (!["draft", "rejected", "published"].includes(course.status))
       throw new Error("Only draft, rejected, or published courses can be submitted");
     if (course.modules.length === 0)
@@ -195,23 +194,25 @@ export const submitCourseForReview = mutation({
 export const withdrawCourseFromReview = mutation({
   args: { id: v.id("courses") },
   handler: async (ctx, { id }) => {
-    const userId = await requireInstructor(ctx.db, ctx.auth);
+    await requireInstructor(ctx.db, ctx.auth);
     const course = await ctx.db.get(id);
-    if (!course)                     throw new Error("Course not found");
-    if (course.createdBy !== userId) throw new Error("Forbidden");
+    if (!course) throw new Error("Course not found");
     if (course.status !== "pending_review") throw new Error("Course is not under review");
     await ctx.db.patch(id, { status: "draft", updatedAt: Date.now() });
     return { ok: true };
   },
 });
 
+// ─── Delete is blocked for published courses — only drafts/rejected can be deleted
+// by any instructor. Admins use adminDeleteCourse if they need to force-delete.
 export const deleteMyCourse = mutation({
   args: { id: v.id("courses") },
   handler: async (ctx, { id }) => {
-    const userId = await requireInstructor(ctx.db, ctx.auth);
+    await requireInstructor(ctx.db, ctx.auth);
     const course = await ctx.db.get(id);
-    if (!course)                     throw new Error("Course not found");
-    if (course.createdBy !== userId) throw new Error("Forbidden");
+    if (!course) throw new Error("Course not found");
+    if (course.status === "published")
+      throw new Error("Published courses cannot be deleted. Ask an admin to unpublish it first.");
     await ctx.db.delete(id);
     return { ok: true };
   },
@@ -391,20 +392,19 @@ export const resetModuleProgress = mutation({
 });
 
 // Step 1 — frontend asks for a short-lived upload URL.
-// The file is PUT directly to Convex storage (never passes through your server).
 export const generateImageUploadUrl = mutation({
   handler: async (ctx) => {
-    await requireInstructor(ctx.db, ctx.auth);   // only logged-in instructors can upload
+    await requireInstructor(ctx.db, ctx.auth);
     return await ctx.storage.generateUploadUrl();
   },
 });
- 
+
 // Step 2 — after the PUT succeeds, exchange the storageId for a permanent URL.
 export const saveUploadedImage = mutation({
   args: { storageId: v.string() },
   handler: async (ctx, { storageId }) => {
     await requireInstructor(ctx.db, ctx.auth);
     const url = await ctx.storage.getUrl(storageId as any);
-    return url;                   // permanent public URL — safe to embed in TipTap HTML
+    return url;
   },
 });

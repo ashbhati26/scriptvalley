@@ -6,6 +6,8 @@ import UserReport from "./UserReport";
 import ExperienceAdminPanel from "./Experiences";
 import TeamManager from "./TeamManager";
 import ContentReview from "./ContentReview";
+import CoursesList   from "./CoursesList";
+import DSASheetsList from "./SheetsList";
 import Overview from "./Overview";
 import {
   LayoutDashboard,
@@ -14,12 +16,14 @@ import {
   GraduationCap,
   UsersRound,
   LayoutList,
+  Award,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
-type Mode = "overview" | "reports" | "experiences" | "team" | "content-review";
+type Mode = "overview" | "reports" | "experiences" | "team" | "content-review" | "courses" | "dsa-sheets";
 
 export default function AdminLayout() {
   const [mode, setMode] = useState<Mode>("overview");
@@ -38,8 +42,10 @@ export default function AdminLayout() {
   ];
 
   const platformNav: NavItem[] = [
-    { key: "team", label: "Team", Icon: UsersRound },
+    { key: "team",           label: "Team",           Icon: UsersRound },
     { key: "content-review", label: "Content Review", Icon: LayoutList },
+    { key: "courses",        label: "Courses",        Icon: Award      },
+    { key: "dsa-sheets",     label: "DSA Sheets",     Icon: BookOpen   },
   ];
 
   function handleNavClick(key: Mode) {
@@ -168,6 +174,8 @@ export default function AdminLayout() {
             )}
             {mode === "team" && <TeamManager />}
             {mode === "content-review" && <ContentReview />}
+            {mode === "courses"        && <CoursesList />}
+            {mode === "dsa-sheets"     && <DSASheetsList />}
           </motion.div>
         </AnimatePresence>
       </main>
