@@ -4,11 +4,14 @@ export type RoundType =
   | "System Design"
   | "HR Interview"
   | "Managerial Round"
-  | "Group Discussion";
+  | "Group Discussion"
+  | "Hackathon"
+  | "Online Interview";
 
 export type Difficulty = "Easy" | "Medium" | "Hard";
 export type Outcome    = "Selected" | "Rejected" | "On Hold" | "Withdrew";
 export type ExpStatus  = "pending" | "published" | "rejected";
+export type SelectionType = "on-campus" | "off-campus";
 
 export type InterviewRound = {
   type: RoundType;
@@ -27,11 +30,15 @@ export type InterviewExperience = {
   role: string;
   location?: string;
   package?: string;
+  joiningDate?: string;       // NEW: expected joining month (YYYY-MM)
+  selectionType?: SelectionType; // NEW: "on-campus" | "off-campus"
   outcome: Outcome;
   interviewDate: string;
   rounds: InterviewRound[];
   overview: string;
   tips?: string;
+  minCgpa?: string;           // NEW: minimum CGPA required
+  otherCriteria?: string;     // NEW: other eligibility criteria
   // Meta
   status: ExpStatus;
   createdAt: number;

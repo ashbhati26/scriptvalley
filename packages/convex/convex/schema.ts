@@ -240,16 +240,21 @@ export default defineSchema({
     role:          v.string(),
     location:      v.optional(v.string()),
     package:       v.optional(v.string()),
+    joiningDate:   v.optional(v.string()),   // NEW: expected joining date (YYYY-MM)
+    selectionType: v.optional(v.string()),   // NEW: "on-campus" | "off-campus"
     outcome:       v.string(),
     interviewDate: v.string(),
     rounds: v.array(v.object({
-      type:        v.string(),
+      type:        v.string(),               // extended: "Hackathon" | "Online Interview" added
       description: v.string(),
       duration:    v.optional(v.string()),
       difficulty:  v.optional(v.string()),
     })),
     overview:    v.string(),
     tips:        v.optional(v.string()),
+    // NEW: company eligibility criteria
+    minCgpa:          v.optional(v.string()),
+    otherCriteria:    v.optional(v.string()),
     status:      v.string(),
     createdAt:   v.number(),
     publishedAt: v.optional(v.number()),

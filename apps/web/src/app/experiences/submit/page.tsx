@@ -1,3 +1,4 @@
+// app/experiences/submit/page.tsx
 "use client";
 
 import { useUser } from "@clerk/nextjs";
@@ -8,20 +9,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, User, Linkedin, Building2, Briefcase,
   MapPin, DollarSign, Calendar, Plus, Trash2, ChevronDown,
-  Send, Loader2, CheckCircle2,
+  Send, Loader2, CheckCircle2, GraduationCap,
 } from "lucide-react";
 import { useMutation } from "convex/react";
 import { api } from "../../../../../../packages/convex/convex/_generated/api";
 import type {
-  RoundType, Difficulty, Outcome, InterviewRound, ExperienceFormData,
+  RoundType, Difficulty, Outcome, SelectionType, InterviewRound, ExperienceFormData,
 } from "@/app/experiences/types/experiences";
 
 const ROUND_TYPES: RoundType[] = [
   "Online Assessment", "Technical Interview", "System Design",
   "HR Interview", "Managerial Round", "Group Discussion",
+  "Hackathon", "Online Interview",
 ];
-const DIFFICULTIES: Difficulty[] = ["Easy", "Medium", "Hard"];
-const OUTCOMES: Outcome[]        = ["Selected", "Rejected", "On Hold", "Withdrew"];
+const DIFFICULTIES: Difficulty[]    = ["Easy", "Medium", "Hard"];
+const OUTCOMES: Outcome[]           = ["Selected", "Rejected", "On Hold", "Withdrew"];
+const SELECTION_TYPES: SelectionType[] = ["on-campus", "off-campus"];
 
 const OUTCOME_ACTIVE: Record<Outcome, string> = {
   Selected:  "border-emerald-500/30 bg-emerald-500/8 text-emerald-400",
@@ -180,10 +183,10 @@ export default function SubmitExperiencePage() {
     if (isLoaded && !user) router.push("/sign-in");
   }, [isLoaded, user, router]);
 
-  const [form, setForm]     = useState<Partial<ExperienceFormData>>({ name: "", outcome: "Selected", rounds: [blank()] });
-  const [errors, setErrors] = useState<Err>({});
+  const [form, setForm]       = useState<Partial<ExperienceFormData>>({ name: "", outcome: "Selected", rounds: [blank()] });
+  const [errors, setErrors]   = useState<Err>({});
   const [loading, setLoading] = useState(false);
-  const [done, setDone]     = useState(false);
+  const [done, setDone]       = useState(false);
 
   useEffect(() => {
     if (user && !form.name) setForm((p) => ({ ...p, name: user.fullName ?? "" }));
@@ -214,10 +217,21 @@ export default function SubmitExperiencePage() {
     setLoading(true);
     try {
       await submitMutation({
-        name: form.name!, linkedinUrl: form.linkedinUrl!, company: form.company!,
-        role: form.role!, location: form.location, package: form.package,
-        outcome: form.outcome!, interviewDate: form.interviewDate!,
-        rounds: form.rounds!, overview: form.overview!, tips: form.tips,
+        name:          form.name!,
+        linkedinUrl:   form.linkedinUrl!,
+        company:       form.company!,
+        role:          form.role!,
+        location:      form.location,
+        package:       form.package,
+        joiningDate:   form.joiningDate,
+        selectionType: form.selectionType,
+        outcome:       form.outcome!,
+        interviewDate: form.interviewDate!,
+        rounds:        form.rounds!,
+        overview:      form.overview!,
+        tips:          form.tips,
+        minCgpa:       form.minCgpa,
+        otherCriteria: form.otherCriteria,
       });
       setDone(true);
     } catch (err) {
@@ -254,6 +268,7 @@ export default function SubmitExperiencePage() {
 
         <form onSubmit={submit} className="space-y-5">
 
+          {/* ── Step 1: About you ─────────────────────────────────────────── */}
           <Card step={1} title="About you" desc="Shown publicly on your published experience">
             <Field label="Full name" required error={errors.name}>
               <IconInput icon={User} type="text" placeholder="Your name"
@@ -267,6 +282,7 @@ export default function SubmitExperiencePage() {
             </Field>
           </Card>
 
+          {/* ── Step 2: Job details ───────────────────────────────────────── */}
           <Card step={2} title="Job details" desc="The role you interviewed for">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Company" required error={errors.company}>
@@ -280,6 +296,7 @@ export default function SubmitExperiencePage() {
                   onChange={(e) => set("role", e.target.value)} />
               </Field>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Location">
                 <IconInput icon={MapPin} type="text" placeholder="e.g. Bangalore, Remote"
@@ -290,12 +307,21 @@ export default function SubmitExperiencePage() {
                   value={form.package ?? ""} onChange={(e) => set("package", e.target.value)} />
               </Field>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Interview month" required error={errors.interviewDate}>
                 <IconInput icon={Calendar} type="month"
                   value={form.interviewDate ?? ""} error={!!errors.interviewDate}
                   onChange={(e) => set("interviewDate", e.target.value)} />
               </Field>
+              <Field label="Expected joining date">
+                <IconInput icon={Calendar} type="month"
+                  value={form.joiningDate ?? ""}
+                  onChange={(e) => set("joiningDate", e.target.value)} />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Outcome" required>
                 <div className="flex flex-wrap gap-1.5">
                   {OUTCOMES.map((o) => (
@@ -308,9 +334,47 @@ export default function SubmitExperiencePage() {
                   ))}
                 </div>
               </Field>
+
+              <Field label="Selection type">
+                <div className="flex gap-5 pt-1">
+                  {SELECTION_TYPES.map((t) => (
+                    <label key={t} className="flex items-center gap-2 cursor-pointer group">
+                      {/* hidden native radio for a11y */}
+                      <input
+                        type="radio"
+                        name="selectionType"
+                        value={t}
+                        checked={form.selectionType === t}
+                        onChange={() => set("selectionType", t)}
+                        className="sr-only"
+                      />
+                      {/* custom radio ring */}
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+                        form.selectionType === t
+                          ? t === "on-campus"
+                            ? "border-violet-400 bg-violet-400/15"
+                            : "border-sky-400 bg-sky-400/15"
+                          : "border-[var(--border-medium)] group-hover:border-[var(--border-default)]"
+                      }`}>
+                        {form.selectionType === t && (
+                          <div className={`w-2 h-2 rounded-full ${t === "on-campus" ? "bg-violet-400" : "bg-sky-400"}`} />
+                        )}
+                      </div>
+                      <span className={`text-xs transition-colors ${
+                        form.selectionType === t
+                          ? t === "on-campus" ? "text-violet-400" : "text-sky-400"
+                          : "text-[var(--text-disabled)] group-hover:text-[var(--text-muted)]"
+                      }`}>
+                        {t === "on-campus" ? "On-Campus" : "Off-Campus"}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </Field>
             </div>
           </Card>
 
+          {/* ── Step 3: Interview rounds ──────────────────────────────────── */}
           <Card step={3} title="Interview rounds" desc="One entry per round — be as specific as possible">
             {errors.rounds && <p className="text-[10px] text-red-400">{errors.rounds}</p>}
             <AnimatePresence initial={false}>
@@ -332,7 +396,38 @@ export default function SubmitExperiencePage() {
             </button>
           </Card>
 
-          <Card step={4} title="Your write-up" desc="The main content shown on your published card">
+          {/* ── Step 4: Company criteria ──────────────────────────────────── */}
+          <Card step={4} title="Company criteria" desc="Eligibility requirements set by the company (optional)">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Minimum CGPA required">
+                <div className="relative">
+                  <GraduationCap className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-disabled)] pointer-events-none" />
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    placeholder="e.g. 7.5"
+                    value={form.minCgpa ?? ""}
+                    onChange={(e) => set("minCgpa", e.target.value)}
+                    className={`${base} pl-8`}
+                  />
+                </div>
+              </Field>
+              <Field label="Other criteria">
+                <input
+                  type="text"
+                  placeholder="e.g. No active backlogs, CS/IT only"
+                  value={form.otherCriteria ?? ""}
+                  onChange={(e) => set("otherCriteria", e.target.value)}
+                  className={base}
+                />
+              </Field>
+            </div>
+          </Card>
+
+          {/* ── Step 5: Write-up ──────────────────────────────────────────── */}
+          <Card step={5} title="Your write-up" desc="The main content shown on your published card">
             <Field label="Overview" required error={errors.overview}>
               <textarea rows={5}
                 placeholder="Overall process — timeline, communication, culture, what stood out…"

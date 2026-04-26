@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import {
   Building2, Briefcase, MapPin, Linkedin, ChevronRight,
   Calendar, Pencil, Trash2, Share2, Twitter, Link as LinkIcon,
+  GraduationCap, Users,
 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { useMutation } from "convex/react";
@@ -21,15 +22,19 @@ type ConvexExperience = {
   role: string;
   location?: string;
   package?: string;
+  joiningDate?: string;
+  selectionType?: string;
   outcome: string;
   interviewDate: string;
   rounds: { type: string; description: string; duration?: string; difficulty?: string }[];
   overview: string;
   tips?: string;
+  minCgpa?: string;
+  otherCriteria?: string;
   status: string;
   createdAt: number;
   publishedAt?: number;
-  userId?: string; // clerk userId of the author
+  userId?: string;
 };
 
 export const OUTCOME_CLS: Record<string, string> = {
@@ -139,10 +144,14 @@ export default function ExperienceCard({ exp, index = 0, onDeleted }: {
 
   const isAuthor = user && exp.userId === user.id;
 
-  const { slug, name, company, role, location, outcome, rounds, interviewDate, overview, linkedinUrl, package: pkg } = exp;
+  const { slug, name, company, role, location, outcome, rounds, interviewDate, overview, linkedinUrl, package: pkg, joiningDate, selectionType, minCgpa } = exp;
 
   const month = interviewDate
     ? new Date(interviewDate + "-01").toLocaleDateString("en-US", { month: "short", year: "numeric" })
+    : "";
+
+  const joining = joiningDate
+    ? new Date(joiningDate + "-01").toLocaleDateString("en-US", { month: "short", year: "numeric" })
     : "";
 
   const accentColor =
@@ -198,9 +207,31 @@ export default function ExperienceCard({ exp, index = 0, onDeleted }: {
             </span>
           )}
           {pkg && <span className="text-[11px] text-[var(--text-disabled)]">· {pkg}</span>}
+          {joining && (
+            <span className="flex items-center gap-1 text-[11px] text-[var(--text-disabled)]" title="Expected joining date">
+              <Calendar className="w-3 h-3 text-emerald-400/70" />
+              <span>Joining: {joining}</span>
+            </span>
+          )}
           {month && (
             <span className="flex items-center gap-1 text-[11px] text-[var(--text-disabled)]">
               <Calendar className="w-3 h-3" />{month}
+            </span>
+          )}
+          {selectionType && (
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+              selectionType === "on-campus"
+                ? "border-violet-500/25 bg-violet-500/8 text-violet-400"
+                : "border-sky-500/25 bg-sky-500/8 text-sky-400"
+            }`}>
+              <Users className="w-2.5 h-2.5" />
+              {selectionType === "on-campus" ? "On-Campus" : "Off-Campus"}
+            </span>
+          )}
+          {minCgpa && (
+            <span className="flex items-center gap-1 text-[11px] text-[var(--text-disabled)]" title="Minimum CGPA required">
+              <GraduationCap className="w-3 h-3" />
+              CGPA ≥ {minCgpa}
             </span>
           )}
         </div>

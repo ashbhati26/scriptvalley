@@ -1,3 +1,4 @@
+// app/experiences/[slug]/edit/page.tsx
 "use client";
 
 import { useUser } from "@clerk/nextjs";
@@ -8,18 +9,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, User, Linkedin, Building2, Briefcase,
   MapPin, DollarSign, Calendar, Plus, Trash2, ChevronDown,
-  Send, Loader2, CheckCircle2,
+  Send, Loader2, CheckCircle2, GraduationCap,
 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../../../../packages/convex/convex/_generated/api";
 import { Id } from "../../../../../../../packages/convex/convex/_generated/dataModel";
 import type {
-  RoundType, Difficulty, Outcome, InterviewRound, ExperienceFormData,
+  RoundType, Difficulty, Outcome, SelectionType, InterviewRound, ExperienceFormData,
 } from "@/app/experiences/types/experiences";
 
 const ROUND_TYPES: RoundType[] = [
   "Online Assessment", "Technical Interview", "System Design",
   "HR Interview", "Managerial Round", "Group Discussion",
+  "Hackathon", "Online Interview",
 ];
 const DIFFICULTIES: Difficulty[] = ["Easy", "Medium", "Hard"];
 const OUTCOMES: Outcome[]        = ["Selected", "Rejected", "On Hold", "Withdrew"];
@@ -189,12 +191,10 @@ export default function EditExperiencePage() {
   const [done,    setDone]    = useState(false);
   const [seeded,  setSeeded]  = useState(false);
 
-  // Redirect if not logged in
   useEffect(() => {
     if (isLoaded && !user) router.push("/sign-in");
   }, [isLoaded, user, router]);
 
-  // Pre-fill form once data loads
   useEffect(() => {
     if (exp && !seeded) {
       setForm({
@@ -204,17 +204,21 @@ export default function EditExperiencePage() {
         role:          exp.role,
         location:      exp.location ?? "",
         package:       exp.package ?? "",
+        joiningDate:   exp.joiningDate ?? "",
+        // ✅ Fix: Convex returns `string`, cast to the narrower SelectionType union
+        selectionType: (exp.selectionType as SelectionType) ?? undefined,
         outcome:       exp.outcome as Outcome,
         interviewDate: exp.interviewDate,
         rounds:        exp.rounds as InterviewRound[],
         overview:      exp.overview,
         tips:          exp.tips ?? "",
+        minCgpa:       exp.minCgpa ?? "",
+        otherCriteria: exp.otherCriteria ?? "",
       });
       setSeeded(true);
     }
   }, [exp, seeded]);
 
-  // Not the author or not found
   useEffect(() => {
     if (exp === null) router.push("/experiences");
   }, [exp, router]);
@@ -260,11 +264,15 @@ export default function EditExperiencePage() {
         role:          form.role!,
         location:      form.location,
         package:       form.package,
+        joiningDate:   form.joiningDate   || undefined,
+        selectionType: form.selectionType || undefined,
         outcome:       form.outcome!,
         interviewDate: form.interviewDate!,
         rounds:        form.rounds!,
         overview:      form.overview!,
         tips:          form.tips,
+        minCgpa:       form.minCgpa       || undefined,
+        otherCriteria: form.otherCriteria || undefined,
       });
       setDone(true);
     } catch (err) {
@@ -306,6 +314,7 @@ export default function EditExperiencePage() {
 
         <form onSubmit={submit} className="space-y-5">
 
+          {/* ── Step 1: About you ─────────────────────────────────────────── */}
           <Card step={1} title="About you" desc="Shown publicly on your published experience">
             <Field label="Full name" required error={errors.name}>
               <IconInput icon={User} type="text" placeholder="Your name"
@@ -319,6 +328,7 @@ export default function EditExperiencePage() {
             </Field>
           </Card>
 
+          {/* ── Step 2: Job details ───────────────────────────────────────── */}
           <Card step={2} title="Job details" desc="The role you interviewed for">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Company" required error={errors.company}>
@@ -348,6 +358,13 @@ export default function EditExperiencePage() {
                   value={form.interviewDate ?? ""} error={!!errors.interviewDate}
                   onChange={(e) => set("interviewDate", e.target.value)} />
               </Field>
+              <Field label="Expected joining date">
+                <IconInput icon={Calendar} type="month"
+                  value={form.joiningDate ?? ""}
+                  onChange={(e) => set("joiningDate", e.target.value)} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Outcome" required>
                 <div className="flex flex-wrap gap-1.5">
                   {OUTCOMES.map((o) => (
@@ -362,9 +379,44 @@ export default function EditExperiencePage() {
                   ))}
                 </div>
               </Field>
+              <Field label="Selection type">
+                <div className="flex gap-4 pt-1">
+                  {(["on-campus", "off-campus"] as const).map((t) => (
+                    <label key={t} className="flex items-center gap-2 cursor-pointer group">
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+                        form.selectionType === t
+                          ? t === "on-campus"
+                            ? "border-violet-400 bg-violet-400/20"
+                            : "border-sky-400 bg-sky-400/20"
+                          : "border-[var(--border-medium)] group-hover:border-[var(--border-default)]"
+                      }`}>
+                        {form.selectionType === t && (
+                          <div className={`w-2 h-2 rounded-full ${t === "on-campus" ? "bg-violet-400" : "bg-sky-400"}`} />
+                        )}
+                      </div>
+                      <input
+                        type="radio"
+                        name="selectionType"
+                        value={t}
+                        checked={form.selectionType === t}
+                        onChange={() => set("selectionType", t)}
+                        className="sr-only"
+                      />
+                      <span className={`text-xs transition-colors ${
+                        form.selectionType === t
+                          ? t === "on-campus" ? "text-violet-400" : "text-sky-400"
+                          : "text-[var(--text-disabled)] group-hover:text-[var(--text-muted)]"
+                      }`}>
+                        {t === "on-campus" ? "On-Campus" : "Off-Campus"}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </Field>
             </div>
           </Card>
 
+          {/* ── Step 3: Interview rounds ──────────────────────────────────── */}
           <Card step={3} title="Interview rounds" desc="One entry per round — be as specific as possible">
             {errors.rounds && <p className="text-[10px] text-red-400">{errors.rounds}</p>}
             <AnimatePresence initial={false}>
@@ -395,7 +447,38 @@ export default function EditExperiencePage() {
             </button>
           </Card>
 
-          <Card step={4} title="Your write-up" desc="The main content shown on your published card">
+          {/* ── Step 4: Company criteria ──────────────────────────────────── */}
+          <Card step={4} title="Company criteria" desc="Eligibility requirements set by the company (optional)">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Minimum CGPA required">
+                <div className="relative">
+                  <GraduationCap className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-disabled)] pointer-events-none" />
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    placeholder="e.g. 7.5"
+                    value={form.minCgpa ?? ""}
+                    onChange={(e) => set("minCgpa", e.target.value)}
+                    className={`${base} pl-8`}
+                  />
+                </div>
+              </Field>
+              <Field label="Other criteria">
+                <input
+                  type="text"
+                  placeholder="e.g. No active backlogs, CS/IT branch only"
+                  value={form.otherCriteria ?? ""}
+                  onChange={(e) => set("otherCriteria", e.target.value)}
+                  className={base}
+                />
+              </Field>
+            </div>
+          </Card>
+
+          {/* ── Step 5: Write-up ──────────────────────────────────────────── */}
+          <Card step={5} title="Your write-up" desc="The main content shown on your published card">
             <Field label="Overview" required error={errors.overview}>
               <textarea rows={5}
                 placeholder="Overall process — timeline, communication, culture, what stood out…"
