@@ -1,6 +1,7 @@
 // Interview experience submissions — students submit, admins review and publish.
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { requireAdmin } from "./_helper";
 
 function slugify(str: string) {
   return str
@@ -182,10 +183,13 @@ export const getExperienceBySlugForAuthor = query({
   },
 });
 
+// ─── Admin-only functions ─────────────────────────────────────────────────────
+// All functions below require the caller to be an admin.
+// requireAdmin throws if the caller is not in the admins table.
+
 export const getAllExperiencesAdmin = query({
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    await requireAdmin(ctx.db, ctx.auth);
     return await ctx.db.query("experiences").order("desc").collect();
   },
 });
@@ -193,28 +197,31 @@ export const getAllExperiencesAdmin = query({
 export const publishExperience = mutation({
   args: { id: v.id("experiences") },
   handler: async (ctx, { id }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    await requireAdmin(ctx.db, ctx.auth);
+    const exp = await ctx.db.get(id);
+    if (!exp) throw new Error("Experience not found");
     await ctx.db.patch(id, { status: "published", publishedAt: Date.now() });
+    return { success: true };
   },
 });
 
 export const rejectExperience = mutation({
   args: { id: v.id("experiences") },
   handler: async (ctx, { id }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    await requireAdmin(ctx.db, ctx.auth);
+    const exp = await ctx.db.get(id);
+    if (!exp) throw new Error("Experience not found");
     await ctx.db.patch(id, { status: "rejected" });
+    return { success: true };
   },
 });
 
 export const adminDeleteExperience = mutation({
   args: { id: v.id("experiences") },
   handler: async (ctx, { id }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    await requireAdmin(ctx.db, ctx.auth);
     const exp = await ctx.db.get(id);
-    if (!exp) throw new Error("Not found");
+    if (!exp) throw new Error("Experience not found");
     await ctx.db.delete(id);
     return { success: true };
   },

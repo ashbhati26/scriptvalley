@@ -10,7 +10,6 @@ import Link from "next/link";
 import { Clock, Trash2, User } from "lucide-react";
 import Image from "next/image";
 import toast from "react-hot-toast";
-import StarButton from "@/components/StarButton";
 
 function SnippetCard({ snippet }: { snippet: Snippet }) {
   const { user } = useUser();
@@ -68,7 +67,6 @@ function SnippetCard({ snippet }: { snippet: Snippet }) {
                 className="flex items-center gap-1.5 shrink-0"
                 onClick={(e) => e.preventDefault()}
               >
-                <StarButton snippetId={snippet._id} />
 
                 {user?.id === snippet.userId && (
                   <button

@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useQuery } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../../../../../../../packages/convex/convex/_generated/api";
 import {
   BookOpen,
   ChevronRight,
@@ -12,6 +15,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Course, CourseModule, Lesson, lessonSlug } from "../../../courseTypes";
+import CourseResetSection from "../../[moduleSlug]/_components/CourseResetSection";
 
 const LEVEL_META: Record<
   string,
@@ -51,9 +55,9 @@ function LessonRow({
   lessonIndex,
   globalIndex,
 }: {
-  courseSlug: string;
-  moduleSlug: string;
-  lesson: Lesson;
+  courseSlug:  string;
+  moduleSlug:  string;
+  lesson:      Lesson;
   lessonIndex: number;
   globalIndex: number;
 }) {
@@ -64,7 +68,6 @@ function LessonRow({
       href={`/courses/${courseSlug}/${moduleSlug}/${lSlug}`}
       className="group flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--bg-hover)] transition-colors"
     >
-      {/* Number */}
       <span className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold text-[var(--text-disabled)] bg-[var(--bg-input)] shrink-0 group-hover:text-[#3A5EFF] group-hover:bg-[rgba(58,94,255,0.08)] transition-colors">
         {lesson.lessonNumber ?? globalIndex + 1}
       </span>
@@ -92,16 +95,16 @@ function ModuleSection({
   modIndex,
   lessonOffset,
 }: {
-  course: Course;
-  mod: CourseModule;
-  modIndex: number;
+  course:       Course;
+  mod:          CourseModule;
+  modIndex:     number;
   lessonOffset: number;
 }) {
-  const lessons = [...(mod.lessons ?? [])].sort((a, b) => a.order - b.order);
-  const hasMCQ = (mod.mcqQuestions?.length ?? 0) > 0;
-  const hasCode = (mod.codingChallenges?.length ?? 0) > 0;
-  const hasMiniProj = !!mod.miniProject?.title;
-  const hasAssess = hasMCQ || hasCode || hasMiniProj;
+  const lessons      = [...(mod.lessons ?? [])].sort((a, b) => a.order - b.order);
+  const hasMCQ       = (mod.mcqQuestions?.length     ?? 0) > 0;
+  const hasCode      = (mod.codingChallenges?.length ?? 0) > 0;
+  const hasMiniProj  = !!mod.miniProject?.title;
+  const hasAssess    = hasMCQ || hasCode || hasMiniProj;
   const isStructured = course.template === "structured";
 
   return (
@@ -203,9 +206,9 @@ function ModuleSection({
               </p>
               <p className="text-[10px] text-[var(--text-disabled)] mt-0.5">
                 {[
-                  hasMCQ && "MCQs",
-                  hasCode && "Challenges",
-                  hasMiniProj && "Mini project",
+                  hasMCQ       && "MCQs",
+                  hasCode      && "Challenges",
+                  hasMiniProj  && "Mini project",
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -221,37 +224,71 @@ function ModuleSection({
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function CourseOverview({ course }: { course: Course }) {
+  const { user }     = useUser();
   const isStructured = course.template === "structured";
-  const modules = [...(course.modules ?? [])].sort((a, b) => a.order - b.order);
+  const modules      = [...(course.modules ?? [])].sort((a, b) => a.order - b.order);
+
   const totalLessons = isStructured
     ? modules.reduce((s, m) => s + (m.lessons?.length ?? 0), 0)
     : 0;
   const totalMCQs = modules.reduce(
-    (s, m) => s + (m.mcqQuestions?.length ?? 0),
-    0,
+    (s, m) => s + (m.mcqQuestions?.length ?? 0), 0,
   );
   const totalChallenges = modules.reduce(
-    (s, m) => s + (m.codingChallenges?.length ?? 0) + (m.miniProject ? 1 : 0),
-    0,
+    (s, m) => s + (m.codingChallenges?.length ?? 0) + (m.miniProject ? 1 : 0), 0,
   );
   const levelMeta = course.level ? LEVEL_META[course.level] : null;
 
-  // Cumulative lesson offset per module for global numbering
+  // ── Fetch progress so we can show the reset section and "Continue" CTA ──
+  const progressRows = useQuery(
+    api.courses.getLessonProgress,
+    user ? { courseSlug: course.slug } : "skip",
+  ) as { moduleSlug: string; lessonSlug: string }[] | undefined;
+
+  const completedLessons = progressRows?.length ?? 0;
+
+  // ── Build deep-link CTA: Continue if in progress, Start if fresh ──────────
+  const completedSet = new Set(
+    (progressRows ?? []).map((r) => `${r.moduleSlug}::${r.lessonSlug}`)
+  );
+
+  function makeLessonSlug(lesson: Lesson, idx: number): string {
+    const base = lesson.title.trim().toLowerCase()
+      .replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 60);
+    return base || `lesson-${idx + 1}`;
+  }
+
+  function getCtaHref(): string {
+    // If in progress, deep-link to the first incomplete lesson
+    if (isStructured && completedLessons > 0 && completedLessons < totalLessons) {
+      for (const mod of modules) {
+        const lessons = [...(mod.lessons ?? [])].sort((a, b) => a.order - b.order);
+        for (let li = 0; li < lessons.length; li++) {
+          const lSlug = makeLessonSlug(lessons[li], li);
+          if (!completedSet.has(`${mod.slug}::${lSlug}`)) {
+            return `/courses/${course.slug}/${mod.slug}/${lSlug}`;
+          }
+        }
+      }
+    }
+    // Default: start from the beginning
+    const firstMod = modules[0];
+    if (!firstMod) return `/courses/${course.slug}`;
+    return isStructured && firstMod.lessons?.[0]
+      ? `/courses/${course.slug}/${firstMod.slug}/${lessonSlug(firstMod.lessons[0], 0)}`
+      : `/courses/${course.slug}/${firstMod.slug}`;
+  }
+
+  const ctaHref     = getCtaHref();
+  const isInProgress = isStructured && completedLessons > 0 && completedLessons < totalLessons;
+  const isCompleted  = isStructured && totalLessons > 0 && completedLessons >= totalLessons;
+
+  // ── Cumulative lesson offsets for global numbering ────────────────────────
   const lessonOffsets: number[] = [];
   let off = 0;
   for (const m of modules) {
     lessonOffsets.push(off);
     off += m.lessons?.length ?? 0;
-  }
-
-  // Deep-link to first lesson for CTA
-  const firstMod = modules[0];
-  let startHref = `/courses/${course.slug}`;
-  if (firstMod) {
-    startHref =
-      isStructured && firstMod.lessons?.[0]
-        ? `/courses/${course.slug}/${firstMod.slug}/${lessonSlug(firstMod.lessons[0], 0)}`
-        : `/courses/${course.slug}/${firstMod.slug}`;
   }
 
   return (
@@ -263,18 +300,14 @@ export default function CourseOverview({ course }: { course: Course }) {
     >
       {/* ── Page header ───────────────────────────────────────────────────── */}
       <header className="px-8 md:px-14 pt-10 pb-8 border-b border-[var(--border-subtle)]">
+
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-[var(--text-disabled)] mb-6">
-          <Link
-            href="/courses"
-            className="hover:text-[var(--text-faint)] transition-colors"
-          >
+          <Link href="/courses" className="hover:text-[var(--text-faint)] transition-colors">
             Courses
           </Link>
           <ChevronRight className="w-3 h-3 shrink-0" />
-          <span className="text-[var(--text-faint)] truncate">
-            {course.title}
-          </span>
+          <span className="text-[var(--text-faint)] truncate">{course.title}</span>
         </nav>
 
         {/* Badges */}
@@ -288,11 +321,7 @@ export default function CourseOverview({ course }: { course: Course }) {
             {levelMeta && (
               <span
                 className="text-[10px] font-semibold px-2 py-0.5 rounded border"
-                style={{
-                  color: levelMeta.color,
-                  background: levelMeta.bg,
-                  borderColor: levelMeta.border,
-                }}
+                style={{ color: levelMeta.color, background: levelMeta.bg, borderColor: levelMeta.border }}
               >
                 {levelMeta.label}
               </span>
@@ -300,7 +329,7 @@ export default function CourseOverview({ course }: { course: Course }) {
           </div>
         )}
 
-        {/* Title — Notion page-title style */}
+        {/* Title */}
         <h1 className="text-3xl font-bold text-[var(--text-primary)] leading-tight tracking-tight mb-2">
           {course.title}
         </h1>
@@ -311,44 +340,69 @@ export default function CourseOverview({ course }: { course: Course }) {
           </p>
         )}
 
-        {/* Notion-style property rows */}
+        {/* Property rows */}
         <div className="space-y-1.5 mb-6">
           {(
             [
-              { label: "Modules", value: String(modules.length) },
+              { label: "Modules",    value: String(modules.length) },
               isStructured && totalLessons > 0
-                ? { label: "Lessons", value: String(totalLessons) }
+                ? { label: "Lessons",    value: String(totalLessons) }
                 : null,
               totalMCQs > 0
-                ? { label: "MCQs", value: String(totalMCQs) }
+                ? { label: "MCQs",       value: String(totalMCQs) }
                 : null,
               totalChallenges > 0
                 ? { label: "Challenges", value: String(totalChallenges) }
                 : null,
-            ] as { label: string; value: string }[]
+              isStructured && totalLessons > 0 && completedLessons > 0
+                ? { label: "Progress",   value: `${completedLessons} / ${totalLessons} lessons` }
+                : null,
+            ] as ({ label: string; value: string } | null | false)[]
           )
-            .filter(
-              (row): row is { label: string; value: string } => row !== null,
-            )
+            .filter((row): row is { label: string; value: string } => !!row)
             .map((row) => (
               <div key={row.label} className="flex items-center gap-3">
                 <span className="text-[10px] uppercase tracking-widest text-[var(--text-disabled)] w-24 shrink-0">
                   {row.label}
                 </span>
-                <span className="text-xs text-[var(--text-secondary)] font-medium">
+                <span className={`text-xs font-medium ${
+                  row.label === "Progress"
+                    ? isCompleted
+                      ? "text-emerald-500"
+                      : "text-[var(--text-secondary)]"
+                    : "text-[var(--text-secondary)]"
+                }`}>
                   {row.value}
+                  {row.label === "Progress" && isCompleted && " ✓"}
                 </span>
               </div>
             ))}
         </div>
 
-        {/* Start button */}
+        {/* Progress bar — structured courses with progress */}
+        {isStructured && totalLessons > 0 && completedLessons > 0 && (
+          <div className="mb-5 max-w-xs">
+            <div className="h-1.5 rounded-full bg-[var(--bg-hover)] overflow-hidden">
+              <div
+                className="h-full bg-[#3A5EFF] rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.floor((completedLessons / totalLessons) * 100))}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* CTA button */}
         <Link
-          href={startHref}
+          href={ctaHref}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#3A5EFF] hover:bg-[#2d4ee0] text-white text-sm font-medium transition-colors"
         >
           <BookOpen className="w-3.5 h-3.5" />
-          Start Learning
+          {isCompleted
+            ? "Review Course"
+            : isInProgress
+              ? "Continue Learning"
+              : "Start Learning"
+          }
         </Link>
       </header>
 
@@ -360,18 +414,14 @@ export default function CourseOverview({ course }: { course: Course }) {
           </p>
           <span className="text-[10px] text-[var(--text-disabled)] bg-[var(--bg-input)] px-1.5 py-0.5 rounded">
             {modules.length} module{modules.length !== 1 ? "s" : ""}
-            {isStructured && totalLessons > 0
-              ? ` · ${totalLessons} lessons`
-              : ""}
+            {isStructured && totalLessons > 0 ? ` · ${totalLessons} lessons` : ""}
           </span>
         </div>
 
         {modules.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
             <BookOpen className="w-8 h-8 text-[var(--text-disabled)]" />
-            <p className="text-sm text-[var(--text-faint)]">
-              No modules yet — check back soon.
-            </p>
+            <p className="text-sm text-[var(--text-faint)]">No modules yet — check back soon.</p>
           </div>
         ) : (
           <div className="space-y-2 max-w-2xl">
@@ -384,6 +434,17 @@ export default function CourseOverview({ course }: { course: Course }) {
                 lessonOffset={lessonOffsets[mi]}
               />
             ))}
+          </div>
+        )}
+
+        {/* ── Reset section — only for signed-in users with progress ─────── */}
+        {user && isStructured && (
+          <div className="max-w-2xl">
+            <CourseResetSection
+              courseSlug={course.slug}
+              courseTitle={course.title}
+              completedLessons={completedLessons}
+            />
           </div>
         )}
       </div>

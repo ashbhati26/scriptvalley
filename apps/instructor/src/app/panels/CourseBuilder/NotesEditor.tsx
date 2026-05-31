@@ -18,21 +18,19 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import { useEffect, useRef, useState } from "react";
 import {
-  Bold, Italic, UnderlineIcon, Strikethrough,
-  Code, Link2, RemoveFormatting, Highlighter,
+  Bold, Italic, UnderlineIcon, Strikethrough, Code,
+  Link2, RemoveFormatting, Highlighter,
 } from "lucide-react";
-import EditorSlashMenu  from "./EditorSlashMenu";
-import EditorToolbar    from "./EditorToolbar";
+import EditorSlashMenu from "./EditorSlashMenu";
+import EditorToolbar from "./EditorToolbar";
 import ImageUploadModal from "./ImageUploadModal";
 
-
 interface NotesEditorProps {
-  content:  string;
+  content: string;
   onChange: (html: string) => void;
 }
 
 // ─── Inline bubble menu ───────────────────────────────────────────────────────
-
 function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -46,9 +44,12 @@ function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) 
       const end    = editor.view.coordsAtPos(editor.state.selection.to);
       const parent = editor.view.dom.closest(".relative") as HTMLElement | null;
       if (!parent) return;
-      const rect = parent.getBoundingClientRect();
-      const midX = (start.left + end.left) / 2;
-      setPos({ top: start.top - rect.top - 46, left: midX - rect.left - 130 });
+      const rect    = parent.getBoundingClientRect();
+      const midX    = (start.left + end.left) / 2;
+      const menuWidth  = 260;
+      const rawLeft    = midX - rect.left - menuWidth / 2;
+      const clampedLeft = Math.min(Math.max(8, rawLeft), (parent.offsetWidth || 680) - menuWidth - 8);
+      setPos({ top: start.top - rect.top - 46, left: clampedLeft });
     };
     editor.on("selectionUpdate", update);
     editor.on("transaction",     update);
@@ -70,17 +71,24 @@ function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) 
     <div
       ref={ref}
       className="absolute z-50 flex items-center gap-0.5 bg-(--bg-elevated) border border-(--border-medium) rounded-lg px-2 py-1.5 shadow-2xl pointer-events-auto"
-      style={{ top: pos.top, left: Math.max(8, pos.left) }}
+      style={{ top: pos.top, left: pos.left }}
       onMouseDown={(e) => e.preventDefault()}
     >
       {items.map(({ icon: Icon, fn, active, title }) => (
-        <button key={title} type="button" title={title} onMouseDown={(e) => { e.preventDefault(); fn(); }}
-          className={`p-1.5 rounded-md transition-all ${active ? "bg-[#3A5EFF]/15 text-[#3A5EFF]" : "text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover)"}`}>
+        <button
+          key={title}
+          type="button"
+          title={title}
+          onMouseDown={(e) => { e.preventDefault(); fn(); }}
+          className={`p-1.5 rounded-md transition-all ${active ? "bg-[#3A5EFF]/15 text-[#3A5EFF]" : "text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover)"}`}
+        >
           <Icon className="w-3.5 h-3.5" />
         </button>
       ))}
       <div className="w-px h-4 bg-(--border-subtle) mx-0.5" />
-      <button type="button" title="Link"
+      <button
+        type="button"
+        title="Link"
         onMouseDown={(e) => {
           e.preventDefault();
           if (editor.isActive("link")) { editor.chain().focus().unsetLink().run(); return; }
@@ -92,9 +100,12 @@ function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) 
         <Link2 className="w-3.5 h-3.5" />
       </button>
       <div className="w-px h-4 bg-(--border-subtle) mx-0.5" />
-      <button type="button" title="Clear formatting"
+      <button
+        type="button"
+        title="Clear formatting"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().unsetAllMarks().clearNodes().run(); }}
-        className="p-1.5 rounded-md text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover) transition-all">
+        className="p-1.5 rounded-md text-(--text-faint) hover:text-(--text-primary) hover:bg-(--bg-hover) transition-all"
+      >
         <RemoveFormatting className="w-3.5 h-3.5" />
       </button>
     </div>
@@ -102,13 +113,15 @@ function InlineBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) 
 }
 
 // ─── Main editor ──────────────────────────────────────────────────────────────
-
 export default function NotesEditor({ content, onChange }: NotesEditorProps) {
   const [slashOpen,      setSlashOpen]      = useState(false);
   const [slashQuery,     setSlashQuery]     = useState("");
   const [slashPos,       setSlashPos]       = useState({ top: 0, left: 0 });
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
+
+  // Suppress incoming sync when editor itself triggered the change (cursor-jump fix)
+  const suppressSync = useRef(false);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -125,23 +138,31 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
       Color,
       TextStyle,
       Placeholder.configure({
-        placeholder: ({ node }) => node.type.name === "heading" ? "Heading" : "Type '/' for commands, or start writing…",
+        placeholder: ({ node }) =>
+          node.type.name === "heading" ? "Heading" : "Type '/' for commands, or start writing…",
         emptyEditorClass: "is-editor-empty",
         emptyNodeClass:   "is-empty",
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
       Table.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
+      TableRow, TableHeader, TableCell,
     ],
     content: content || "",
-    onUpdate({ editor }) { onChange(editor.getHTML()); },
+    onUpdate({ editor }) {
+      suppressSync.current = true;
+      onChange(editor.getHTML());
+      setTimeout(() => { suppressSync.current = false; }, 0);
+    },
     editorProps: {
       attributes: {
+        // FIX: was "py-8" (32px top AND bottom) — 32px top gap between toolbar
+        // and first line of content made it look like the toolbar was floating
+        // mid-page. Changed to "pt-4 pb-10" (16px top / 40px bottom).
+        // 16px top feels like normal document leading; 40px bottom gives room
+        // before the Save lesson button.
         class: [
-          "outline-none min-h-full px-7 md:px-14 py-8 scrollbar-hide max-w-3xl",
+          "outline-none min-h-full px-7 md:px-14 pt-4 pb-10 scrollbar-hide max-w-3xl",
           "text-sm text-(--text-secondary) leading-7",
           "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-(--text-primary) [&_h1]:mt-8 [&_h1]:mb-3 [&_h1]:tracking-tight",
           "[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-(--text-primary) [&_h2]:mt-7 [&_h2]:mb-2.5",
@@ -157,7 +178,6 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
           "[&_li[data-type=taskItem][data-checked=true]>div]:line-through [&_li[data-type=taskItem][data-checked=true]>div]:text-(--text-disabled)",
           "[&_blockquote]:border-l-[3px] [&_blockquote]:border-[#3A5EFF]/50 [&_blockquote]:pl-4 [&_blockquote]:my-4 [&_blockquote]:text-(--text-muted) [&_blockquote]:italic",
           "[&_code]:bg-(--bg-input) [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[#3A5EFF] [&_code]:text-xs [&_code]:font-mono",
-          // Code block — dark surface, clean monospace
           "[&_pre]:bg-[#0f1117] [&_pre]:border [&_pre]:border-white/[0.07] [&_pre]:rounded-xl [&_pre]:p-5 [&_pre]:my-5 [&_pre]:overflow-x-auto",
           "[&_pre_code]:bg-transparent [&_pre_code]:text-[#e2e8f0] [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:leading-6 [&_pre_code]:font-mono",
           "[&_a]:text-[#3A5EFF] [&_a]:no-underline [&_a]:hover:underline",
@@ -174,7 +194,7 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
         if (event.key === "/") {
           setTimeout(() => {
             const { from } = view.state.selection;
-            const coords     = view.coordsAtPos(from);
+            const coords   = view.coordsAtPos(from);
             const editorRect = editorRef.current?.getBoundingClientRect();
             if (!editorRect) return;
             setSlashPos({ top: coords.bottom - editorRect.top + 4, left: coords.left - editorRect.left });
@@ -188,6 +208,7 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
     },
   });
 
+  // Slash query tracking
   useEffect(() => {
     if (!editor || !slashOpen) return;
     const handler = () => {
@@ -201,8 +222,10 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
     return () => { editor.off("update", handler); };
   }, [editor, slashOpen]);
 
+  // Skip setContent when editor itself triggered the change (cursor-jump fix)
   useEffect(() => {
     if (!editor) return;
+    if (suppressSync.current) return;
     const incoming = content || "";
     if (incoming !== editor.getHTML()) editor.commands.setContent(incoming);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,12 +241,12 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
       case "h1":      editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
       case "h2":      editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
       case "h3":      editor.chain().focus().toggleHeading({ level: 3 }).run(); break;
-      case "bullet":  editor.chain().focus().toggleBulletList().run();          break;
-      case "ordered": editor.chain().focus().toggleOrderedList().run();         break;
-      case "todo":    editor.chain().focus().toggleTaskList().run();            break;
-      case "quote":   editor.chain().focus().toggleBlockquote().run();         break;
-      case "code":    editor.chain().focus().toggleCodeBlock().run();           break;
-      case "divider": editor.chain().focus().setHorizontalRule().run();        break;
+      case "bullet":  editor.chain().focus().toggleBulletList().run();           break;
+      case "ordered": editor.chain().focus().toggleOrderedList().run();          break;
+      case "todo":    editor.chain().focus().toggleTaskList().run();             break;
+      case "quote":   editor.chain().focus().toggleBlockquote().run();           break;
+      case "code":    editor.chain().focus().toggleCodeBlock().run();            break;
+      case "divider": editor.chain().focus().setHorizontalRule().run();          break;
       case "table":   editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); break;
     }
     setSlashOpen(false);
@@ -231,25 +254,45 @@ export default function NotesEditor({ content, onChange }: NotesEditorProps) {
 
   return (
     <>
-      <div className="flex flex-col rounded-none overflow-visible">
+      {/*
+        FIX: Toolbar is now rendered FIRST (above the content area) so it
+        appears directly under the metadata divider, not floating mid-page.
+        It also uses position: sticky so it stays visible as the user scrolls
+        down through long lessons.
+        top = navbar (44px) + lesson topbar (44px) = 88px = calc(var(--navbar-height) * 2)
+      */}
+      <div
+        style={{
+          position: "sticky",
+          top: "calc(var(--navbar-height) * 2)",
+          zIndex: 10,
+          background: "var(--bg-base)",
+          borderBottom: "1px solid var(--border-subtle)",
+        }}
+      >
         <EditorToolbar editor={editor} onOpenImageModal={() => setImageModalOpen(true)} />
-        <div className="relative" ref={editorRef}>
-          <EditorContent editor={editor} />
-          <InlineBubbleMenu editor={editor} />
-          {slashOpen && (
-            <EditorSlashMenu
-              query={slashQuery}
-              position={slashPos}
-              onSelect={execSlashCommand}
-              onClose={() => setSlashOpen(false)}
-            />
-          )}
-        </div>
+      </div>
+
+      {/* Editor content area */}
+      <div className="relative flex flex-col rounded-none overflow-visible" ref={editorRef}>
+        <EditorContent editor={editor} />
+        <InlineBubbleMenu editor={editor} />
+        {slashOpen && (
+          <EditorSlashMenu
+            query={slashQuery}
+            position={slashPos}
+            onSelect={execSlashCommand}
+            onClose={() => setSlashOpen(false)}
+          />
+        )}
       </div>
 
       {imageModalOpen && (
         <ImageUploadModal
-          onInsert={(url) => { setImageModalOpen(false); editor?.chain().focus().setImage({ src: url }).run(); }}
+          onInsert={(url) => {
+            setImageModalOpen(false);
+            editor?.chain().focus().setImage({ src: url }).run();
+          }}
           onClose={() => setImageModalOpen(false)}
         />
       )}

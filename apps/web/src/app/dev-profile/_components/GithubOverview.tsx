@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { api } from "../../../../../../packages/convex/convex/_generated/api";
-import { safeFetchJSON } from "@/lib/safeFetch";
+import { safeFetchJSON } from "@/lib/fetchers";
 import StatRow from "./GitHub/StatRow";
 import Heatmap from "./GitHub/Heatmap";
 import GitHubOverviewSkeleton from "./GitHub/GitHubOverviewSkeleton";

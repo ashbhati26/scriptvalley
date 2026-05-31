@@ -49,33 +49,7 @@ export const deleteSnippet = mutation({
       .collect();
     for (const c of comments) await ctx.db.delete(c._id);
 
-    const stars = await ctx.db
-      .query("stars")
-      .withIndex("by_snippet_id")
-      .filter((q) => q.eq(q.field("snippetId"), snippetId))
-      .collect();
-    for (const s of stars) await ctx.db.delete(s._id);
-
     await ctx.db.delete(snippetId);
-  },
-});
-
-export const starSnippet = mutation({
-  args: { snippetId: v.id("snippets") },
-  handler: async (ctx, { snippetId }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-
-    const existing = await ctx.db
-      .query("stars")
-      .withIndex("by_user_id_and_snippet_id")
-      .filter((q) =>
-        q.eq(q.field("userId"), identity.subject) && q.eq(q.field("snippetId"), snippetId)
-      )
-      .first();
-
-    if (existing) { await ctx.db.delete(existing._id); }
-    else           { await ctx.db.insert("stars", { userId: identity.subject, snippetId }); }
   },
 });
 
@@ -167,52 +141,6 @@ export const getComments = query({
   },
 });
 
-export const isSnippetStarred = query({
-  args: { snippetId: v.id("snippets") },
-  handler: async (ctx, { snippetId }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return false;
-
-    const star = await ctx.db
-      .query("stars")
-      .withIndex("by_user_id_and_snippet_id")
-      .filter((q) =>
-        q.eq(q.field("userId"), identity.subject) && q.eq(q.field("snippetId"), snippetId)
-      )
-      .first();
-
-    return !!star;
-  },
-});
-
-export const getSnippetStarCount = query({
-  args: { snippetId: v.id("snippets") },
-  handler: async (ctx, { snippetId }) => {
-    const stars = await ctx.db
-      .query("stars")
-      .withIndex("by_snippet_id")
-      .filter((q) => q.eq(q.field("snippetId"), snippetId))
-      .collect();
-    return stars.length;
-  },
-});
-
-export const getStarredSnippets = query({
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
-
-    const stars = await ctx.db
-      .query("stars")
-      .withIndex("by_user_id")
-      .filter((q) => q.eq(q.field("userId"), identity.subject))
-      .collect();
-
-    const snippets = await Promise.all(stars.map((s) => ctx.db.get(s.snippetId)));
-    return snippets.filter(Boolean);
-  },
-});
-
 export const getPrivateSnippets = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -224,61 +152,5 @@ export const getPrivateSnippets = query({
       )
       .order("desc")
       .collect();
-  },
-});
-
-export const getUserStats = query({
-  args: { userId: v.string() },
-  handler: async (ctx, { userId }) => {
-    const executions = await ctx.db
-      .query("codeExecutions")
-      .withIndex("by_user_id")
-      .filter((q) => q.eq(q.field("userId"), userId))
-      .collect();
-
-    const starredSnippets = await ctx.db
-      .query("stars")
-      .withIndex("by_user_id")
-      .filter((q) => q.eq(q.field("userId"), userId))
-      .collect();
-
-    const snippetDetails = await Promise.all(
-      starredSnippets.map((s) => ctx.db.get(s.snippetId))
-    );
-
-    const starredLanguages = snippetDetails.filter(Boolean).reduce(
-      (acc, curr) => {
-        if (curr?.language) acc[curr.language] = (acc[curr.language] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>
-    );
-
-    const mostStarredLanguage =
-      Object.entries(starredLanguages).sort(([, a], [, b]) => b - a)[0]?.[0] ?? "N/A";
-
-    const last24Hours = executions.filter(
-      (e) => e._creationTime > Date.now() - 24 * 60 * 60 * 1000
-    ).length;
-
-    const languageStats = executions.reduce(
-      (acc, curr) => { acc[curr.language] = (acc[curr.language] || 0) + 1; return acc; },
-      {} as Record<string, number>
-    );
-
-    const languages = Object.keys(languageStats);
-    const favoriteLanguage = languages.length
-      ? languages.reduce((a, b) => (languageStats[a] > languageStats[b] ? a : b))
-      : "N/A";
-
-    return {
-      totalExecutions: executions.length,
-      languagesCount:  languages.length,
-      languages,
-      last24Hours,
-      favoriteLanguage,
-      languageStats,
-      mostStarredLanguage,
-    };
   },
 });

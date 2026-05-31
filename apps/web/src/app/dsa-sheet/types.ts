@@ -6,35 +6,36 @@ export type LinkObj = {
 };
 
 export interface Question {
-  title: string;
-  difficulty: Difficulty;
+  title:       string;
+  difficulty:  Difficulty;
   link: {
     platform: string;
-    url: string;
+    url:      string;
   };
   githubLink?: string;
+  notes?:      string;
 }
 
-export interface Topic {
-  topic: string;
+// Sub-topic — used when a topic has useSubTopics = true (Striver-style sheets)
+export interface SubTopic {
+  name:      string;
   questions: Question[];
 }
 
-export interface DSASheet {
-  _id: string;
-  slug: string;
-  name: string;
-  category?: string;
-  description?: string;
-  note?: string[];
-  topics: {
-    topic: string;
-    questions: {
-      title: string;
-      difficulty: string;
-      link: { platform: string; url: string };
-      githubLink?: string;
-    }[];
-  }[];
+export interface Topic {
+  topic:        string;
+  questions:    Question[];
+  // Sub-topic fields — present when the instructor used the sub-topics mode
+  useSubTopics: boolean;
+  subTopics?:   SubTopic[];
 }
 
+export interface DSASheet {
+  _id:          string;
+  slug:         string;
+  name:         string;
+  category?:    string;
+  description?: string;
+  note?:        string[];
+  topics: Topic[];
+}

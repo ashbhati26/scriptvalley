@@ -9,6 +9,7 @@
  */
 
 import type * as _helper from "../_helper.js";
+import type * as adminFeatures from "../adminFeatures.js";
 import type * as admins from "../admins.js";
 import type * as codeExecutions from "../codeExecutions.js";
 import type * as courses from "../courses.js";
@@ -34,6 +35,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   _helper: typeof _helper;
+  adminFeatures: typeof adminFeatures;
   admins: typeof admins;
   codeExecutions: typeof codeExecutions;
   courses: typeof courses;

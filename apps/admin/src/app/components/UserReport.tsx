@@ -63,7 +63,7 @@ export default function UserReport({ userId, onBack }: { userId: string; onBack:
 
   if (report === undefined) return (
     <div className="flex items-center justify-center py-20">
-      <div className="w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+      <div className="w-4 h-4 border-2 border-[rgba(58,94,255,0.3)] border-t-[#3A5EFF] rounded-full animate-spin" />
     </div>
   );
   if (!report) return <p className="text-sm text-red-400/70">No report found for this user.</p>;
@@ -92,7 +92,7 @@ export default function UserReport({ userId, onBack }: { userId: string; onBack:
             </button>
             <button
               onClick={downloadCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand hover:bg-brand-hover text-white text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#3A5EFF] hover:bg-[#4a6aff] text-white text-xs font-medium transition-colors"
             >
               <Download className="w-3.5 h-3.5" />Export CSV
             </button>
@@ -162,7 +162,7 @@ export default function UserReport({ userId, onBack }: { userId: string; onBack:
                         <span className="text-sm font-medium text-text-secondary truncate">{s.name}</span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <CheckCircle2 className="w-3 h-3 text-brand" />
+                        <CheckCircle2 className="w-3 h-3 text-[#3A5EFF]" />
                         <span className="text-sm font-medium text-text-secondary">{s.totalSolved}</span>
                         <span className="text-xs text-text-disabled">/ {s.totalAttempted}</span>
                       </div>

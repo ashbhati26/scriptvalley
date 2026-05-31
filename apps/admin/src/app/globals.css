@@ -32,6 +32,21 @@
   --danger-bg:      rgba(239, 68, 68, 0.06);
   --danger-border:  rgba(239, 68, 68, 0.15);
 
+  /* ── Warning tokens ── */
+  --warning:        #d97706;
+  --warning-bg:     rgba(217, 119, 6, 0.08);
+  --warning-border: rgba(217, 119, 6, 0.20);
+
+  /* ── Success tokens ── */
+  --success:        #22a55b;
+  --success-bg:     rgba(34, 165, 91, 0.08);
+  --success-border: rgba(34, 165, 91, 0.20);
+
+  /* ── Shadow tokens ── */
+  --shadow-sm:      0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md:      0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg:      0 8px 24px rgba(0, 0, 0, 0.10);
+
   --background: var(--bg-base);
   --foreground: var(--text-primary);
 
@@ -66,6 +81,21 @@
   --danger:         rgba(239, 68, 68, 0.7);
   --danger-bg:      rgba(239, 68, 68, 0.06);
   --danger-border:  rgba(239, 68, 68, 0.15);
+
+  /* ── Warning tokens (dark) ── */
+  --warning:        #f59e0b;
+  --warning-bg:     rgba(245, 158, 11, 0.10);
+  --warning-border: rgba(245, 158, 11, 0.25);
+
+  /* ── Success tokens (dark) ── */
+  --success:        #34d375;
+  --success-bg:     rgba(52, 211, 117, 0.10);
+  --success-border: rgba(52, 211, 117, 0.25);
+
+  /* ── Shadow tokens (dark) ── */
+  --shadow-sm:      0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md:      0 4px 12px rgba(0, 0, 0, 0.40);
+  --shadow-lg:      0 8px 24px rgba(0, 0, 0, 0.50);
 
   --background: var(--bg-base);
   --foreground: var(--text-primary);
@@ -121,6 +151,21 @@ html, body {
   --color-danger:          var(--danger);
   --color-danger-bg:       var(--danger-bg);
   --color-danger-border:   var(--danger-border);
+
+  /* Warning tokens */
+  --color-warning:         var(--warning);
+  --color-warning-bg:      var(--warning-bg);
+  --color-warning-border:  var(--warning-border);
+
+  /* Success tokens */
+  --color-success:         var(--success);
+  --color-success-bg:      var(--success-bg);
+  --color-success-border:  var(--success-border);
+
+  /* Shadow tokens */
+  --shadow-sm:             var(--shadow-sm);
+  --shadow-md:             var(--shadow-md);
+  --shadow-lg:             var(--shadow-lg);
 
   /* Typography */
   --font-sans: var(--font-sans);

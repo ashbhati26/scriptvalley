@@ -408,3 +408,90 @@ export const saveUploadedImage = mutation({
     return url;
   },
 });
+// ─── Co-author mutations ───────────────────────────────────────────────────────
+//
+// Only the course owner (createdBy) can add or remove co-authors.
+// Co-authors can edit but cannot publish, reject, or delete.
+
+export const addCoAuthor = mutation({
+  args: {
+    courseId: v.id("courses"),
+    email:    v.string(),
+  },
+  handler: async (ctx, { courseId, email }) => {
+    const callerId = await requireInstructor(ctx.db, ctx.auth);
+
+    const course = await ctx.db.get(courseId);
+    if (!course) throw new Error("Course not found");
+    if (course.createdBy !== callerId)
+      throw new Error("Only the course owner can add co-authors");
+
+    // Look up the target user by email (case-insensitive).
+    const normalizedEmail = email.trim().toLowerCase();
+    const allUsers = await ctx.db.query("users").collect();
+    const targetUser = (allUsers as any[]).find(
+      (u) => (u.email ?? "").toLowerCase() === normalizedEmail
+    );
+    if (!targetUser)
+      throw new Error(`No ScriptValley account found for "${email}". The user must sign up first.`);
+
+    // Target must be an approved instructor.
+    const instructorRow = await ctx.db
+      .query("instructors")
+      .withIndex("by_user_id", (q) => q.eq("userId", targetUser.userId))
+      .unique();
+    if (!instructorRow || !instructorRow.isApproved)
+      throw new Error(`${email} is not an approved instructor`);
+
+    // Cannot add yourself.
+    if (targetUser.userId === callerId)
+      throw new Error("You are already the course owner");
+
+    // Idempotency guard — don't add the same person twice.
+    const existing = (course.coAuthors ?? []) as Array<{ userId: string; name: string; email: string }>;
+    if (existing.some((a) => a.userId === targetUser.userId))
+      throw new Error(`${email} is already a co-author on this course`);
+
+    await ctx.db.patch(courseId, {
+      coAuthors: [
+        ...existing,
+        {
+          userId: targetUser.userId,
+          name:   targetUser.name ?? "",
+          email:  targetUser.email ?? normalizedEmail,
+        },
+      ],
+      updatedAt: Date.now(),
+    });
+
+    return { ok: true };
+  },
+});
+
+export const removeCoAuthor = mutation({
+  args: {
+    courseId: v.id("courses"),
+    userId:   v.string(),
+  },
+  handler: async (ctx, { courseId, userId }) => {
+    const callerId = await requireInstructor(ctx.db, ctx.auth);
+
+    const course = await ctx.db.get(courseId);
+    if (!course) throw new Error("Course not found");
+    if (course.createdBy !== callerId)
+      throw new Error("Only the course owner can remove co-authors");
+
+    const existing = (course.coAuthors ?? []) as Array<{ userId: string; name: string; email: string }>;
+    const updated  = existing.filter((a) => a.userId !== userId);
+
+    if (updated.length === existing.length)
+      throw new Error("That user is not a co-author of this course");
+
+    await ctx.db.patch(courseId, {
+      coAuthors: updated,
+      updatedAt: Date.now(),
+    });
+
+    return { ok: true };
+  },
+});

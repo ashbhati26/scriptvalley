@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { ReactLenis } from "lenis/react";
 import { motion } from "framer-motion";
-import Navbar from "../../components/Navbar";
 import Hero from "./_sections/Hero";
 import { KeyboardWithPreview } from "./_sections/Keyboard";
 import AnimatedHero from "./_components/AnimatedHero";
@@ -38,7 +37,6 @@ export default function Home() {
       >
         <ReactLenis root>
           <div className="min-h-screen w-full overflow-x-clip bg-[var(--bg-base)]">
-            <Navbar />
             <Hero />
             <KeyboardWithPreview />
             <AnimatedHero />

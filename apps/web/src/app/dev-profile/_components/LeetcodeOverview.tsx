@@ -6,7 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../../../packages/convex/convex/_generated/api";
 import LeetCodeCalendar from "./LeetCode/LeetCodeCalendar";
 import LeetCodeProgress from "./LeetCode/LeetCodeProgress";
-import { safeFetchJSON } from "@/lib/safeFetch";
+import { safeFetchJSON } from "@/lib/fetchers";
 import LeetCodeOverviewSkeleton from "./LeetCode/LeetCodeOverviewSkeleton";
 import { RefreshCw } from "lucide-react";
 
