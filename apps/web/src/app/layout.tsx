@@ -3,8 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import ConvexClientProvider  from "../components/providers/ConvexClientProvider";
-import AuthModalProvider     from "../components/providers/AuthModalProvider"; // ← new
-import AuthModal             from "../components/auth/AuthModal";              // ← new
+import AuthModalProvider     from "../components/providers/AuthModalProvider";
+import AuthModal             from "../components/auth/AuthModal";
 import { Toaster }           from "react-hot-toast";
 import ClientAnalytics       from "../components/ClientAnalytics";
 import UserSyncProvider      from "../components/providers/UserSyncProvider";

@@ -495,3 +495,161 @@ export const removeCoAuthor = mutation({
     return { ok: true };
   },
 });
+
+// ─── Cheat Sheet / Revision PDF ───────────────────────────────────────────────
+//
+// Instructors upload a PDF cheat sheet per course.
+// Students unlock view access at 40% progress, download at 50%.
+// The storage URL is never returned to clients below the 40% threshold.
+
+// Step 1 — instructor requests a short-lived upload URL for the PDF.
+export const generateCheatSheetUploadUrl = mutation({
+  handler: async (ctx) => {
+    await requireInstructor(ctx.db, ctx.auth);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Step 2 — after upload succeeds, save the storageId + filename to the course.
+// Only the course owner or a co-author can call this.
+export const saveCheatSheet = mutation({
+  args: {
+    courseId: v.id("courses"),
+    storageId: v.string(),
+    fileName:  v.string(),
+  },
+  handler: async (ctx, { courseId, storageId, fileName }) => {
+    const callerId = await requireInstructor(ctx.db, ctx.auth);
+
+    const course = await ctx.db.get(courseId);
+    if (!course) throw new Error("Course not found");
+
+    const isOwner    = course.createdBy === callerId;
+    const isCoAuthor = (course.coAuthors ?? []).some((a: any) => a.userId === callerId);
+    if (!isOwner && !isCoAuthor)
+      throw new Error("Only the course owner or a co-author can upload a cheat sheet");
+
+    // If a previous cheat sheet exists, delete it from storage first
+    if (course.cheatSheetStorageId) {
+      try { await ctx.storage.delete(course.cheatSheetStorageId as any); } catch {}
+    }
+
+    await ctx.db.patch(courseId, {
+      cheatSheetStorageId: storageId,
+      cheatSheetFileName:  fileName.trim() || "cheatsheet.pdf",
+      updatedAt:           Date.now(),
+    });
+
+    return { ok: true };
+  },
+});
+
+// Remove the cheat sheet — deletes from storage and clears the course fields.
+export const removeCheatSheet = mutation({
+  args: { courseId: v.id("courses") },
+  handler: async (ctx, { courseId }) => {
+    const callerId = await requireInstructor(ctx.db, ctx.auth);
+
+    const course = await ctx.db.get(courseId);
+    if (!course) throw new Error("Course not found");
+
+    const isOwner    = course.createdBy === callerId;
+    const isCoAuthor = (course.coAuthors ?? []).some((a: any) => a.userId === callerId);
+    if (!isOwner && !isCoAuthor)
+      throw new Error("Only the course owner or a co-author can remove the cheat sheet");
+
+    if (course.cheatSheetStorageId) {
+      try { await ctx.storage.delete(course.cheatSheetStorageId as any); } catch {}
+    }
+
+    await ctx.db.patch(courseId, {
+      cheatSheetStorageId: undefined,
+      cheatSheetFileName:  undefined,
+      updatedAt:           Date.now(),
+    });
+
+    return { ok: true };
+  },
+});
+
+// Returns the student's access level for the cheat sheet.
+// Progress is computed server-side — the URL is NEVER returned for "none" access.
+//
+// accessLevel:
+//   "none"     — < 40% complete (or no sheet uploaded)
+//   "view"     — 40–49% complete (can view inline, no download)
+//   "download" — >= 50% complete (can view + download)
+export const getCheatSheetAccess = query({
+  args: { courseSlug: v.string() },
+  handler: async (ctx, { courseSlug }) => {
+    const course = await ctx.db
+      .query("courses")
+      .withIndex("by_slug", (q) => q.eq("slug", courseSlug))
+      .unique();
+
+    if (!course || !course.cheatSheetStorageId) {
+      return { hasSheet: false, accessLevel: "none" as const, url: null, fileName: null };
+    }
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { hasSheet: true, accessLevel: "none" as const, url: null, fileName: course.cheatSheetFileName ?? "cheatsheet.pdf" };
+    }
+
+    const userId = identity.subject;
+
+    // Count completed lessons for this user + course
+    const progressRows = await ctx.db
+      .query("lesson_progress")
+      .withIndex("by_user_course", (q) => q.eq("userId", userId).eq("courseSlug", courseSlug))
+      .collect();
+
+    const completedLessons = progressRows.length;
+
+    // Count total lessons in the course
+    const totalLessons = (course.modules ?? []).reduce(
+      (sum: number, m: any) => sum + (m.lessons?.length ?? 0),
+      0
+    );
+
+    // Edge case: freeform course with no lessons — grant download on any progress
+    const pct = totalLessons === 0
+      ? (completedLessons > 0 ? 100 : 0)
+      : Math.floor((completedLessons / totalLessons) * 100);
+
+    // Determine access level
+    if (pct < 40) {
+      return {
+        hasSheet:    true,
+        accessLevel: "none" as const,
+        url:         null,
+        fileName:    course.cheatSheetFileName ?? "cheatsheet.pdf",
+        pct,
+        threshold:   40,
+      };
+    }
+
+    // Fetch the storage URL — only returned when access is granted
+    const url = await ctx.storage.getUrl(course.cheatSheetStorageId as any);
+
+    if (pct < 50) {
+      return {
+        hasSheet:    true,
+        accessLevel: "view" as const,
+        url,
+        fileName:    course.cheatSheetFileName ?? "cheatsheet.pdf",
+        pct,
+        threshold:   50,
+      };
+    }
+
+    return {
+      hasSheet:    true,
+      accessLevel: "download" as const,
+      url,
+      fileName:    course.cheatSheetFileName ?? "cheatsheet.pdf",
+      pct,
+      threshold:   null,
+    };
+  },
+});

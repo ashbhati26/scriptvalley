@@ -36,7 +36,6 @@ function normalizeSheetRow(doc: any) {
   };
 }
 
-// Public — only published sheets, plus legacy rows with no status set.
 export const getAll = query({
   handler: async ({ db }) => {
     const published = await db
@@ -47,7 +46,9 @@ export const getAll = query({
       .query("dsaSheets")
       .collect()
       .then((all: any[]) => all.filter((r) => !r.status));
-    return [...published, ...legacy].map(normalizeSheetRow);
+    return [...published, ...legacy]
+      .map(normalizeSheetRow)
+      .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
   },
 });
 
@@ -65,7 +66,9 @@ export const getBySlug = query({
 export const adminGetAll = query({
   handler: async ({ db, auth }) => {
     await requireAdmin(db, auth);
-    return (await db.query("dsaSheets").collect()).map(normalizeSheetRow);
+    return (await db.query("dsaSheets").collect())
+      .map(normalizeSheetRow)
+      .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
   },
 });
 
@@ -80,12 +83,12 @@ export const getPendingSheets = query({
   },
 });
 
-// ─── Returns ALL sheets visible to instructors (not just the caller's own).
-// The UI shows a "created by" label so instructors know who owns each sheet.
 export const getMySheets = query({
   handler: async ({ db, auth }) => {
     await requireInstructor(db, auth);
-    return (await db.query("dsaSheets").collect()).map(normalizeSheetRow);
+    return (await db.query("dsaSheets").collect())
+      .map(normalizeSheetRow)
+      .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
   },
 });
 
@@ -97,6 +100,19 @@ export const remove = mutation({
     const sheet = await db.get(id);
     if (!sheet) throw new Error("Sheet not found");
     await db.delete(id);
+    return { ok: true };
+  },
+});
+
+export const reorderSheets = mutation({
+  args: { orderedIds: v.array(v.id("dsaSheets")) },
+  handler: async ({ db, auth }, { orderedIds }) => {
+    await requireAdmin(db, auth);
+    for (let i = 0; i < orderedIds.length; i++) {
+      const sheet = await db.get(orderedIds[i]);
+      if (!sheet) continue;
+      await db.patch(orderedIds[i], { order: i });
+    }
     return { ok: true };
   },
 });
@@ -153,6 +169,10 @@ export const createDraftSheet = mutation({
       ? parseContent(args.content)
       : (args.content ?? { topics: [] });
 
+    // Place new sheets at the end by default
+    const allSheets  = await db.query("dsaSheets").collect();
+    const maxOrder   = allSheets.reduce((m: number, s: any) => Math.max(m, s.order ?? 0), 0);
+
     const inserted = await db.insert("dsaSheets", {
       slug:             computedSlug,
       name:             args.name,
@@ -164,7 +184,7 @@ export const createDraftSheet = mutation({
       createdBy:        userId,
       createdAt:        now,
       updatedAt:        now,
-      order:            args.order ?? 0,
+      order:            args.order ?? maxOrder + 1,
       status:           "draft",
     });
 
@@ -172,9 +192,6 @@ export const createDraftSheet = mutation({
   },
 });
 
-// ─── Any instructor can edit any sheet.
-// Published sheets stay published while being edited (no status reset on publish).
-// Only pending_review sheets get pulled back to draft on edit.
 export const updateDraftSheet = mutation({
   args: {
     id:               v.id("dsaSheets"),

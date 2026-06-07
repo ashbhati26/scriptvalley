@@ -8,7 +8,9 @@ import {
   ArrowLeft, Save, Send, RotateCcw, Download,
   Eye, AlertCircle, Hash, AlignLeft, Plus,
   LayoutList, FileText, ChevronDown, FileJson,
+  FileUp, Trash2, Lock, CheckCircle2, Loader2,
 } from "lucide-react";
+import { useRef } from "react";
 import {
   Module, CourseForm, CourseTemplate, CourseLevel,
   makeSlug, emptyModule, stripKeys, hydrateModules, LEVELS,
@@ -27,6 +29,192 @@ const LEVEL_COLORS: Record<string, string> = {
   beginner: "var(--success)", intermediate: "var(--warning)",
   advanced: "var(--danger)", "all-levels": "var(--brand)",
 };
+
+
+// ─── CheatSheetUploader ───────────────────────────────────────────────────────
+// Inline component — lives in CourseEditor so it shares the instructor app
+// design system (sv-* classes) without any extra file.
+
+function CheatSheetUploader({
+  courseId, existingStorageId, existingFileName, canEdit,
+}: {
+  courseId:          string;
+  existingStorageId?: string;
+  existingFileName?:  string;
+  canEdit:           boolean;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [removing,  setRemoving]  = useState(false);
+  const [localFile, setLocalFile] = useState<{ storageId: string; fileName: string } | null>(null);
+
+  const genUrlMut  = useMutation(api.courses.generateCheatSheetUploadUrl);
+  const saveMut    = useMutation(api.courses.saveCheatSheet);
+  const removeMut  = useMutation(api.courses.removeCheatSheet);
+
+  const activeStorageId = localFile?.storageId ?? existingStorageId;
+  const activeFileName  = localFile?.fileName  ?? existingFileName;
+  const hasSheet        = !!activeStorageId;
+
+  async function handleFileSelect(file: File) {
+    if (!file || file.type !== "application/pdf") {
+      toast.error("Only PDF files are supported"); return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("PDF must be under 20 MB"); return;
+    }
+    setUploading(true);
+    try {
+      // Step 1 — get upload URL
+      const uploadUrl = await genUrlMut();
+      // Step 2 — PUT the file directly to Convex storage
+      const res = await fetch(uploadUrl, {
+        method:  "POST",
+        headers: { "Content-Type": file.type },
+        body:    file,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const { storageId } = await res.json();
+      // Step 3 — save storageId to the course
+      await saveMut({ courseId: courseId as any, storageId, fileName: file.name });
+      setLocalFile({ storageId, fileName: file.name });
+      toast.success("Cheat sheet uploaded");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleRemove() {
+    if (!confirm("Remove the cheat sheet PDF from this course?")) return;
+    setRemoving(true);
+    try {
+      await removeMut({ courseId: courseId as any });
+      setLocalFile(null);
+      toast.success("Cheat sheet removed");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Remove failed");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <p className="sv-section-label" style={{ marginBottom: 4 }}>Cheat Sheet / Revision PDF</p>
+      <p className="text-[11px] sv-text-disabled" style={{ marginBottom: 12 }}>
+        Students unlock <strong>preview</strong> at 40% progress and <strong>download</strong> at 50%.
+      </p>
+
+      <div className="sv-card overflow-hidden">
+        {/* Header */}
+        <div className="sv-bg-hover flex items-center justify-between gap-2"
+          style={{ padding: "10px 14px", borderBottom: "1px solid var(--border-subtle)" }}>
+          <div className="flex items-center gap-2">
+            <FileUp size={13} className="sv-text-faint" />
+            <span className="text-[13px] font-medium sv-text-secondary" style={{ letterSpacing: "-0.008em" }}>
+              {hasSheet ? activeFileName : "No PDF uploaded"}
+            </span>
+          </div>
+          {hasSheet && (
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 text-[10px] sv-text-success">
+                <CheckCircle2 size={10} />Uploaded
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "12px 14px" }}>
+          {!hasSheet ? (
+            // Upload state
+            <div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/pdf"
+                className="sr-only"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
+              />
+              {canEdit ? (
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className="sv-btn-secondary flex items-center gap-1.5 text-[12px]"
+                  style={{ padding: "7px 14px", borderRadius: "var(--radius-md)", opacity: uploading ? 0.6 : 1 }}
+                >
+                  {uploading
+                    ? <><Loader2 size={11} className="sv-spin-slow" />Uploading…</>
+                    : <><FileUp size={11} />Upload PDF</>
+                  }
+                </button>
+              ) : (
+                <p className="text-[12px] sv-text-disabled italic">No cheat sheet uploaded yet.</p>
+              )}
+              <p className="text-[10px] sv-text-disabled" style={{ marginTop: 6 }}>
+                Max 20 MB · PDF only
+              </p>
+            </div>
+          ) : (
+            // Uploaded state
+            <div className="flex flex-col gap-3">
+              {/* Access thresholds */}
+              <div className="flex flex-col gap-1.5">
+                {[
+                  { icon: Lock,         label: "Preview unlocks at",  value: "40% progress", color: "var(--warning)"  },
+                  { icon: CheckCircle2, label: "Download unlocks at", value: "50% progress", color: "var(--success)"  },
+                ].map(({ icon: Icon, label, value, color }) => (
+                  <div key={label} className="flex items-center gap-2 text-[11px]">
+                    <Icon size={10} style={{ color }} />
+                    <span className="sv-text-disabled">{label}</span>
+                    <span className="font-medium sv-text-secondary">{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Actions */}
+              {canEdit && (
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="application/pdf"
+                    className="sr-only"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
+                  />
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading || removing}
+                    className="sv-btn-secondary flex items-center gap-1.5 text-[11px]"
+                    style={{ padding: "5px 10px", borderRadius: "var(--radius-sm)", opacity: (uploading || removing) ? 0.6 : 1 }}
+                  >
+                    {uploading
+                      ? <><Loader2 size={10} className="sv-spin-slow" />Uploading…</>
+                      : <><FileUp size={10} />Replace</>
+                    }
+                  </button>
+                  <button
+                    onClick={handleRemove}
+                    disabled={uploading || removing}
+                    className="sv-btn-danger flex items-center gap-1.5 text-[11px]"
+                    style={{ padding: "5px 10px", borderRadius: "var(--radius-sm)", opacity: (uploading || removing) ? 0.6 : 1 }}
+                  >
+                    {removing
+                      ? <><Loader2 size={10} className="sv-spin-slow" />Removing…</>
+                      : <><Trash2 size={10} />Remove</>
+                    }
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function CourseEditor({ course, canEdit, onBack }: Props) {
   const isNew = course === null;
@@ -303,6 +491,16 @@ export default function CourseEditor({ course, canEdit, onBack }: Props) {
                 Co-authors can edit this course but cannot publish or delete it.
               </p>
             </div>
+          )}
+
+          {/* Cheat Sheet PDF — only for saved courses */}
+          {!isNew && (course as any)?._id && (
+            <CheatSheetUploader
+              courseId={(course as any)._id}
+              existingStorageId={(course as any)?.cheatSheetStorageId}
+              existingFileName={(course as any)?.cheatSheetFileName}
+              canEdit={canEdit}
+            />
           )}
 
           {/* Bottom save row */}

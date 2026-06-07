@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Course, CourseModule, Lesson, lessonSlug } from "../../../courseTypes";
 import CourseResetSection from "../../[moduleSlug]/_components/CourseResetSection";
+import CheatSheetPanel    from "../../[moduleSlug]/_components/CheatSheetPanel";
 
 const LEVEL_META: Record<
   string,
@@ -436,6 +437,9 @@ export default function CourseOverview({ course }: { course: Course }) {
             ))}
           </div>
         )}
+
+        {/* ── Cheat Sheet panel — server-gated by progress threshold ──────── */}
+        <CheatSheetPanel courseSlug={course.slug} />
 
         {/* ── Reset section — only for signed-in users with progress ─────── */}
         {user && isStructured && (

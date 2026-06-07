@@ -305,6 +305,9 @@ export default defineSchema({
     rejectionReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),
+    // ── Cheat sheet / revision PDF ──
+    cheatSheetStorageId: v.optional(v.string()),
+    cheatSheetFileName:  v.optional(v.string()),
   })
     .index("by_slug", ["slug"])
     .index("by_status", ["status"])
