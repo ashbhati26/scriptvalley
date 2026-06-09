@@ -29,7 +29,9 @@ export default function ImageUploadModal({ onInsert, onClose }: Props) {
     setError(null); setFile(f); setPreview(URL.createObjectURL(f));
   }
 
-  async function uploadAndInsert() {
+const isMigrationMode = true; // 🔁 turn off later
+
+async function uploadAndInsert() {
   if (!file) return;
 
   setUploading(true);
@@ -37,12 +39,25 @@ export default function ImageUploadModal({ onInsert, onClose }: Props) {
 
   try {
     const res = await startUpload([file]);
+    if (isMigrationMode) {
+      const blob = new Blob([JSON.stringify(res, null, 2)], {
+        type: "application/json",
+      });
+
+      const downloadUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = "course-map.json";
+      a.click();
+    }
 
     const url = res?.[0]?.url;
 
     if (!url) throw new Error("Upload failed");
 
-    onInsert(url); // THIS inserts into editor
+    onInsert(url);
+
   } catch (err: any) {
     setError(err?.message ?? "Upload failed.");
   } finally {
