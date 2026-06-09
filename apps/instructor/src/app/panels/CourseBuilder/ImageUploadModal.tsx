@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, Link2, ImageIcon, Loader2 } from "lucide-react";
+import { useUploadThing } from "../../utils/uploadthing";
 
 interface Props { onInsert: (url: string) => void; onClose: () => void; }
 type Tab = "upload" | "url";
@@ -18,9 +19,9 @@ export default function ImageUploadModal({ onInsert, onClose }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error,     setError]     = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { startUpload } = useUploadThing("imageUploader");
 
-  const generateUploadUrl = useMutation(api.courses.generateImageUploadUrl);
-  const saveImageUrl      = useMutation(api.courses.saveUploadedImage);
+  
 
   function acceptFile(f: File) {
     if (!f.type.startsWith("image/")) { setError("Only image files are supported."); return; }
@@ -29,19 +30,25 @@ export default function ImageUploadModal({ onInsert, onClose }: Props) {
   }
 
   async function uploadAndInsert() {
-    if (!file) return;
-    setUploading(true); setError(null);
-    try {
-      const uploadUrl = await generateUploadUrl();
-      const res = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": file.type }, body: file });
-      if (!res.ok) throw new Error("Upload failed — try again.");
-      const { storageId } = await res.json();
-      const publicUrl = await saveImageUrl({ storageId });
-      if (!publicUrl) throw new Error("Could not get image URL.");
-      onInsert(publicUrl);
-    } catch (err: any) { setError(err?.message ?? "Upload failed."); }
-    finally { setUploading(false); }
+  if (!file) return;
+
+  setUploading(true);
+  setError(null);
+
+  try {
+    const res = await startUpload([file]);
+
+    const url = res?.[0]?.url;
+
+    if (!url) throw new Error("Upload failed");
+
+    onInsert(url); // THIS inserts into editor
+  } catch (err: any) {
+    setError(err?.message ?? "Upload failed.");
+  } finally {
+    setUploading(false);
   }
+}
 
   function insertUrl() {
     const t = url.trim();
